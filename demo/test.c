@@ -25,5 +25,9 @@ int main() {
 		j = fun();
 	}
 
+	for (int i = 0; i < 100; i ++) {
+	 s = s + i;
+	}
+
 	return i = j;
 }

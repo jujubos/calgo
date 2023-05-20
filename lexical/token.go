@@ -466,11 +466,11 @@ func (T *TSEMICOLON) TokenTyp() TokenType {
 }
 
 func (T *TLPARAN) TokenTyp() TokenType {
-	return LPARAN
+	return LPAREN
 }
 
 func (T *TRPARAN) TokenTyp() TokenType {
-	return RPARAN
+	return RPAREN
 }
 
 func (T *TLBRACK) TokenTyp() TokenType {
@@ -532,8 +532,8 @@ const (
 	COMMA
 	COLON
 	SEMICOLON
-	LPARAN
-	RPARAN
+	LPAREN
+	RPAREN
 	LBRACK
 	RBRACK
 	LBRACE

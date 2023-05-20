@@ -121,9 +121,8 @@ func (l *Lexer) NextToken() Token {
 					}
 					return &TNUM{Type: NUM, Name: builder.String(), Value: v}
 				} else {
-
+					return &TNUM{Type: NUM, Name: "0", Value: 0}
 				}
-
 			} else { //十进制
 				builder.WriteByte(l.ch)
 				v = v*10 + int64(l.ch-'0')
@@ -289,10 +288,10 @@ func (l *Lexer) NextToken() Token {
 				return &TSEMICOLON{Type: SEMICOLON, Name: ";"}
 			case '(':
 				l.NextChar()
-				return &TLPARAN{Type: LPARAN, Name: "("}
+				return &TLPARAN{Type: LPAREN, Name: "("}
 			case ')':
 				l.NextChar()
-				return &TRPARAN{Type: RPARAN, Name: ")"}
+				return &TRPARAN{Type: RPAREN, Name: ")"}
 			case '[':
 				l.NextChar()
 				return &TLBRACK{Type: LBRACK, Name: "["}
