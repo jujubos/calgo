@@ -2,6 +2,7 @@ package syntax
 
 import (
 	"calgo/lexical"
+	"calgo/table"
 	"fmt"
 	"os"
 )
@@ -17,17 +18,25 @@ func NewParser(filename string) *Parser {
 	}
 }
 
+func (p *Parser) Error(info string) {
+	fname, lnum, cnum := p.lexer.GetPosition()
+	fmt.Printf("语法错误:%s in (line:%d,column:%d) of %s\n", info, lnum, cnum, fname)
+	os.Exit(0)
+}
+
 func (p *Parser) Parse() {
 	p.move()
 	p.program()
-	if !p.match(lexical.ERR) {
-		fmt.Println("Parse err!")
+	if !p.match(lexical.EOF) {
+		p.Error(fmt.Sprintf("Parse err: expected EOF, but got %s", p.tk.String()))
+	} else {
+		fmt.Println("语法分析通过!")
 	}
 }
 
-// <program> -> <segment> <program> | ^
+// <program> -> <segment> <program> | EOF
 func (p *Parser) program() {
-	if p.match(lexical.ERR) {
+	if p.match(lexical.EOF) {
 		return
 	}
 	p.segment()
@@ -38,102 +47,123 @@ func (p *Parser) program() {
 func (p *Parser) segment() {
 	if p.match(lexical.KW_EXTERN) {
 		p.move()
-		p.typedec()
-		p.def()
+		t := p.typedec()
+		p.def(true, t)
 	} else {
-		p.typedec()
-		p.def()
+		t := p.typedec()
+		p.def(false, t)
 	}
 }
 
 // <type> ->	int | char | void
-func (p *Parser) typedec() {
-	if p.match(lexical.KW_INT) || p.match(lexical.KW_CHAR) || p.match(lexical.KW_VOID) {
+func (p *Parser) typedec() lexical.TokenType {
+	switch p.tk.TokenTyp() {
+	case lexical.KW_INT:
 		p.move()
-	} else {
-		fmt.Println("syntax err: typedec err!")
-		os.Exit(0)
+		return lexical.KW_INT
+	case lexical.KW_CHAR:
+		p.move()
+		return lexical.KW_CHAR
+	case lexical.KW_VOID:
+		p.move()
+		return lexical.KW_VOID
+	default:
+		p.Error(fmt.Sprintf("typedec err: expected 'int', 'char' or 'void', but got %s", p.tk.String()))
 	}
+	return lexical.ERR
 }
 
 // <def> -> mul id <init> <deflist> | id <idtail>
-func (p *Parser) def() {
+func (p *Parser) def(ext bool, typ lexical.TokenType) {
 	if p.match(lexical.MUL) {
 		p.move()
 		if p.match(lexical.ID) {
+			varname := p.tk.(*lexical.TID).Name
 			p.move()
-			p.init()
-			p.deflist()
+			p.init(ext, typ, true, varname)
+			p.deflist(ext, typ)
 		} else {
-			fmt.Println("syntax err: def err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("def err: expected ID, but got %s", p.tk.String()))
 		}
 	} else if p.match(lexical.ID) {
+		name := p.tk.(*lexical.TID).Name
 		p.move()
-		p.idtail()
+		p.idtail(ext, typ, false, name)
 	} else {
-		fmt.Println("syntax err: def err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("def err: expected *ID or ID, but got %s", p.tk.String()))
 	}
 }
 
 // <init> -> assign <expr> | ^
-func (p *Parser) init() {
+func (p *Parser) init(ext bool, typ lexical.TokenType, isPtr bool, varname string) *table.Var {
+	v := &table.Var{
+		Name: "default",
+	}
 	if p.match(lexical.ASSIGN) {
 		p.move()
-		p.expr()
+		v = p.expr()
 	}
+	return table.NewVar(table.Symtab.ScopePath, ext, typ, isPtr, varname, v)
 }
 
 // <deflist> -> comma <defdata> <deflist> | semicon
-func (p *Parser) deflist() {
+func (p *Parser) deflist(ext bool, typ lexical.TokenType) {
 	if p.match(lexical.COMMA) {
 		p.move()
-		p.defdata()
-		p.deflist()
+		varr := p.defdata(ext, typ)
+		table.Symtab.AddVar(varr)
+		p.deflist(ext, typ)
 	} else if p.match(lexical.SEMICOLON) {
 		p.move()
 	} else {
-		fmt.Println("syntax err: deflist err!")
+		p.Error(fmt.Sprintf("deflist err: expected ',' or ';', but got %s", p.tk.String()))
 	}
 }
 
 // <idtail> ->	<varrdef> <deflist> | lparen <para> rparen <funtail>
-func (p *Parser) idtail() {
-	if p.match(lexical.LPAREN) {
+// <idtail> 区分函数和变量
+func (p *Parser) idtail(ext bool, typ lexical.TokenType, isPtr bool, name string) {
+	if p.match(lexical.LPAREN) { //函数
 		p.move()
-		p.para()
+		_, lnum, cnum := p.lexer.GetPosition()
+		table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 		if !p.match(lexical.RPAREN) {
-			fmt.Println("syntax err: idtail err!")
-			return
+			p.Error(fmt.Sprintf("idtail err: expected ')', but got %s", p.tk.String()))
 		}
 		p.move()
 		p.funtail()
-	} else {
-		p.varrdef()
-		p.deflist()
+		_, lnum, cnum = p.lexer.GetPosition()
+		table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
+	} else { //变量
+		table.Symtab.AddVar(p.varrdef(ext, typ, isPtr, name))
+		p.deflist(ext, typ)
 	}
 }
 
 // <expr> -> <assexpr>
-func (p *Parser) expr() {
-	p.assexpr()
+func (p *Parser) expr() *table.Var {
+	return p.assexpr()
 }
 
 // <defdata> -> id <varrdef> | mul id <init>
-func (p *Parser) defdata() {
-	if p.match(lexical.ID) {
+// 区分指针变量和非指针变量
+func (p *Parser) defdata(ext bool, typ lexical.TokenType) *table.Var {
+	if p.match(lexical.ID) { //非指针
+		varname := p.tk.(*lexical.TID).Name
 		p.move()
-		p.varrdef()
-	} else if p.match(lexical.MUL) {
+		return p.varrdef(ext, typ, false, varname)
+	} else if p.match(lexical.MUL) { //指针
 		p.move()
 		if !p.match(lexical.ID) {
-			fmt.Println("syntax err: defdata err!")
-			p.init()
+			p.Error(fmt.Sprintf("defdata err: expected ID, but got %s", p.tk.String()))
 		}
+		varname := p.tk.(*lexical.TID).Name
 		p.move()
-		p.init()
+		return p.init(ext, typ, false, varname)
+	} else {
+		p.Error(fmt.Sprintf("defdata err: expected ID or MUL, but got %s", p.tk.String()))
 	}
+	return nil
 }
 
 // <para> ->	<type> <paradata> <paralist> | ^
@@ -155,213 +185,306 @@ func (p *Parser) funtail() {
 }
 
 // <varrdef> -> lbrack num rbrack | <init>
-func (p *Parser) varrdef() {
-	if p.match(lexical.LBRACK) {
+// 区分数组和非数组
+func (p *Parser) varrdef(ext bool, typ lexical.TokenType, isPtr bool, varname string) *table.Var {
+	if p.match(lexical.LBRACK) { //数组，不允许初始化
 		p.move()
 		if !p.match(lexical.NUM) {
-			fmt.Println("syntax err: varrder err!")
-			return
+			p.Error(fmt.Sprintf("varrdef err: expected NUM, but got %s", p.tk.String()))
 		}
+		arrlen := p.tk.(*lexical.TNUM).Value
 		p.move()
 		if !p.match(lexical.RBRACK) {
-			fmt.Println("syntax err: varrdef err")
-			return
+			p.Error(fmt.Sprintf("varrdef err: expected ']', but got %s", p.tk.String()))
 		}
 		p.move()
-	} else if p.match(lexical.ASSIGN) {
-		p.init()
+		return table.NewArrayVar(table.Symtab.ScopePath, ext, typ, varname, arrlen)
+	} else { //非数组，允许初始化
+		return p.init(ext, typ, isPtr, varname)
 	}
+	return nil
 }
 
-// <assexpr> ->	<orexpr><asstail>
-func (p *Parser) assexpr() {
-	p.orexpr()
-	p.asstail()
+// <assexpr> ->	<orexpr> <asstail>
+func (p *Parser) assexpr() *table.Var {
+	lval := p.orexpr()
+	return p.asstail(lval)
 }
 
-// <orexpr> -> 	<andexpr><ortail>
-func (p *Parser) orexpr() {
-	p.andexpr()
-	p.ortail()
+// <orexpr> -> 	<andexpr> <ortail>
+func (p *Parser) orexpr() *table.Var {
+	lval := p.andexpr()
+	return p.ortail(lval)
 }
 
-// <asstail>	->	assign <assexpr> | ^
-func (p *Parser) asstail() {
+// <asstail>	->	assign <orexpr> <asstail> | ^
+func (p *Parser) asstail(lval *table.Var) *table.Var {
 	if p.match(lexical.ASSIGN) {
 		p.move()
-		p.assexpr()
+		val := p.orexpr()
+		//rval := p.asstail(val)
+		p.asstail(val)
+		//TODO: 返回临时结果变量result
+		result := &table.Var{}
+		return result
 	}
+	return lval
 }
 
 // <andexpr> -> <cmpexpr> <andtail>
-func (p *Parser) andexpr() {
-	p.cmpexpr()
-	p.andtail()
+func (p *Parser) andexpr() *table.Var {
+	lval := p.cmpexpr()
+	return p.andtail(lval)
 }
 
-// <ortail> 	-> 	or <andexpr> <ortail>|^
-func (p *Parser) ortail() {
+// <ortail> 	-> 	or <andexpr> <ortail> | ^
+func (p *Parser) ortail(lval *table.Var) *table.Var {
 	if p.match(lexical.OR) {
 		p.move()
-		p.andexpr()
-		p.ortail()
+		val := p.andexpr()
+		//TODO:这里不完整
+		result := GenTwoOp(lval, OP_OR, val)
+		table.Symtab.AddVar(result)
+		return p.ortail(result)
 	}
+	return lval
 }
 
 // <cmpexpr>	->	<aloexpr><cmptail>
-func (p *Parser) cmpexpr() {
-	p.aloexpr()
-	p.cmptail()
+func (p *Parser) cmpexpr() *table.Var {
+	lval := p.aloexpr()
+	return p.cmptail(lval)
 }
 
 // <andtail> -> 	and <cmpexpr> <andtail>|^
-func (p *Parser) andtail() {
+func (p *Parser) andtail(lval *table.Var) *table.Var {
 	if p.match(lexical.AND) {
 		p.move()
-		p.cmpexpr()
-		p.andtail()
+		val := p.cmpexpr()
+		//TODO
+		result := GenTwoOp(lval, OP_AND, val)
+		table.Symtab.AddVar(result)
+		return p.andtail(result)
 	}
+	return lval
 }
 
 // <aloexpr> ->	<item><alotail>
-func (p *Parser) aloexpr() {
-	p.item()
-	p.alotail()
+// ADD | SUB
+func (p *Parser) aloexpr() *table.Var {
+	lval := p.item()
+	return p.alotail(lval)
 }
 
-// <cmptail> ->	<cmps><aloexpr><cmptail> | ^
-func (p *Parser) cmptail() {
+// <cmptail> ->	<cmps> <aloexpr> <cmptail> | ^
+func (p *Parser) cmptail(lval *table.Var) *table.Var {
 	if p.match(lexical.LT) || p.match(lexical.LE) || p.match(lexical.GT) || p.match(lexical.GE) ||
 		p.match(lexical.EQU) || p.match(lexical.NEQU) {
-		p.cmps()
-		p.aloexpr()
-		p.cmptail()
+		op := p.cmps()
+		val := p.aloexpr()
+		result := GenTwoOp(lval, op, val)
+		table.Symtab.AddVar(result)
+		return p.cmptail(result)
 	}
+	return lval
 }
 
 // <item> -> <factor> <itemtail>x
-func (p *Parser) item() {
-	p.factor()
-	p.itemtail()
+func (p *Parser) item() *table.Var {
+	lval := p.factor()
+	return p.itemtail(lval)
 }
 
 // <alotail> ->	<adds> <item> <alotail> | ^
-func (p *Parser) alotail() {
+func (p *Parser) alotail(lval *table.Var) *table.Var {
 	if p.match(lexical.ADD) || p.match(lexical.SUB) {
-		p.adds()
-		p.item()
-		p.alotail()
+		op := p.adds()
+		val := p.item()
+		result := GenTwoOp(lval, op, val)
+		table.Symtab.AddVar(result)
+		return p.alotail(result)
 	}
+	return lval
 }
 
 // <cmps> ->	gt|ge|lt|le|equ|nequ
-func (p *Parser) cmps() {
+func (p *Parser) cmps() OP_TYPE {
 	if !p.match(lexical.GT) && !p.match(lexical.GE) && !p.match(lexical.LT) && !p.match(lexical.LE) &&
 		!p.match(lexical.EQU) && !p.match(lexical.NEQU) {
-		fmt.Println("syntax err: cmps err!")
-		return
+		p.Error(fmt.Sprintf("cmps err: expected '>', '>=', '<', '<=', '=', '!=', but got %s", p.tk.String()))
 	}
+	tk := p.tk
 	p.move()
+	switch tk.TokenTyp() {
+	case lexical.GT:
+		return OP_GT
+	case lexical.GE:
+		return OP_GE
+	case lexical.LT:
+		return OP_LT
+	case lexical.LE:
+		return OP_LE
+	case lexical.EQU:
+		return OP_EQU
+	case lexical.NEQU:
+		return OP_NEQU
+	}
+	return 0
 }
 
 // <factor> -> 	<lop> <factor> | <val>
-func (p *Parser) factor() {
+func (p *Parser) factor() *table.Var {
 	if p.match(lexical.NOT) || p.match(lexical.SUB) || p.match(lexical.LEA) ||
 		p.match(lexical.MUL) || p.match(lexical.INC) || p.match(lexical.DEC) {
-		p.lop()
-		p.factor()
+		op := p.lop()
+		val := p.factor()
+		return GenOenOpLeft(op, val)
 	} else {
-		p.val()
+		return p.val()
 	}
+}
+
+func GenOenOpLeft(op OP_TYPE, varr *table.Var) *table.Var {
+	return nil
 }
 
 // <itemtail> -> <muls> <factor> <itemtail> | ^
-func (p *Parser) itemtail() {
+// MUL | DIV | MOD
+func (p *Parser) itemtail(lval *table.Var) *table.Var {
 	if p.match(lexical.MUL) || p.match(lexical.DIV) || p.match(lexical.MOD) {
-		p.muls()
-		p.factor()
-		p.itemtail()
+		op := p.muls()
+		val := p.factor()
+		result := GenTwoOp(lval, op, val)
+		table.Symtab.AddVar(result)
+		return p.itemtail(result)
 	}
+	return lval
 }
 
 // <adds> -> add|sub
-func (p *Parser) adds() {
+func (p *Parser) adds() OP_TYPE {
 	if !p.match(lexical.ADD) && !p.match(lexical.SUB) {
-		fmt.Println("syntax err: adds err!")
-		return
+		p.Error(fmt.Sprintf("adds err: expected '+', '-', but got %s", p.tk.String()))
 	}
+	tk := p.tk
 	p.move()
+	if tk.TokenTyp() == lexical.ADD {
+		return OP_ADD
+	} else {
+		return OP_SUB
+	}
 }
 
 // <val> ->	<elem> <rop>
-func (p *Parser) val() {
-	p.elem()
-	p.rop()
+// INC | DEC
+func (p *Parser) val() *table.Var {
+	lval := p.elem()
+	if p.match(lexical.INC) || p.match(lexical.DEC) {
+		op := p.rop()
+		result := GenOneOpRight(lval, op)
+		table.Symtab.AddVar(result) //???
+	}
+	return lval
+}
+
+func GenOneOpRight(varr *table.Var, op OP_TYPE) *table.Var {
+	return nil
 }
 
 // <lop> ->  not|sub|lea|mul|inc|dec
-func (p *Parser) lop() {
+func (p *Parser) lop() OP_TYPE {
 	if !p.match(lexical.NOT) && !p.match(lexical.SUB) && !p.match(lexical.ADD) &&
 		!p.match(lexical.MUL) && !p.match(lexical.INC) && !p.match(lexical.DEC) {
-		fmt.Println("syntax err: lop err!")
-		return
+		p.Error(fmt.Sprintf("lop err: expected '!', '-', '+', '*', '++', '--', but got %s", p.tk.String()))
 	}
+	tk := p.tk
 	p.move()
+	switch tk.TokenTyp() {
+	case lexical.NOT:
+		return OP_NOT
+	case lexical.SUB:
+		return OP_SUB
+	case lexical.ADD:
+		return OP_ADD
+	case lexical.MUL:
+		return OP_MUL
+	case lexical.INC:
+		return OP_INC
+	case lexical.DEC:
+		return OP_DEC
+	}
+	return 0
 }
 
 // <muls> -> mul | div | mod
-func (p *Parser) muls() {
+func (p *Parser) muls() OP_TYPE {
 	if !p.match(lexical.MUL) && !p.match(lexical.DIV) && !p.match(lexical.MOD) {
-		fmt.Println("syntax err: muls err!")
-		return
+		p.Error(fmt.Sprintf("muls err: expected '*', '/', '%', but got %s", p.tk.String()))
 	}
+	tk := p.tk
 	p.move()
+	if tk.TokenTyp() == lexical.MUL {
+		return OP_MUL
+	} else if tk.TokenTyp() == lexical.DIV {
+		return OP_DIV
+	}
+	return OP_MOD
 }
 
 // <elem> ->	id <idexpr> | lparen <expr> rparen | <literal>
-func (p *Parser) elem() {
-	if p.match(lexical.ID) {
+// 可以参与表达式运算的：变量、数组索引、函数调用、括号表达式、字面量
+func (p *Parser) elem() *table.Var {
+	var rs *table.Var
+	if p.match(lexical.ID) { //变量、数组索引、函数调用
+		name := p.tk.(*lexical.TID).Name
 		p.move()
-		p.idexpr()
-	} else if p.match(lexical.LPAREN) {
+		rs = p.idexpr(name)
+	} else if p.match(lexical.LPAREN) { //括号表达式
 		p.move()
-		p.expr()
+		rs = p.expr()
 		if !p.match(lexical.RPAREN) {
-			fmt.Println("syntax err: elem err!")
-			return
+			p.Error(fmt.Sprintf("elem err: expected ')', but got %s", p.tk.String()))
 		}
 		p.move()
-	} else {
-		p.literal()
+	} else { //字面量
+		rs = p.literal()
 	}
+	return rs
 }
 
 // <rop>	-> inc | dec | ^
-func (p *Parser) rop() {
+func (p *Parser) rop() OP_TYPE {
 	if p.match(lexical.INC) || p.match(lexical.DEC) {
+		tk := p.tk
 		p.move()
+		if tk.TokenTyp() == lexical.INC {
+			return OP_INC
+		}
+		return OP_DEC
 	}
+	return 0
 }
 
 // <idexpr>	->	lbrack <expr> rbrack | lparen <realarg> rparen | ^
-func (p *Parser) idexpr() {
+func (p *Parser) idexpr(name string) *table.Var {
 	if p.match(lexical.LBRACK) {
 		p.move()
 		p.expr()
 		if !p.match(lexical.RBRACK) {
-			fmt.Println("syntax err: idexpr err!")
-			return
+			p.Error(fmt.Sprintf("idexpr err: expected ']', but got %s", p.tk.String()))
 		}
 		p.move()
 	} else if p.match(lexical.LPAREN) {
 		p.move()
 		p.realarg()
 		if !p.match(lexical.RPAREN) {
-			fmt.Println("syntax err: idexpr err!")
-			return
+			p.Error(fmt.Sprintf("idexpr err: expected ')', but got %s", p.tk.String()))
 		}
 		p.move()
+	} else {
+		return table.Symtab.GetVar(name)
 	}
+	return nil
 }
 
 // <realarg> ->	<arg> <arglist> | ^
@@ -391,15 +514,14 @@ func (p *Parser) paradata() {
 	if p.match(lexical.MUL) {
 		p.move()
 		if !p.match(lexical.ID) {
-			fmt.Println("syntax err: paradata err!")
-			return
+			p.Error(fmt.Sprintf("paradata err: expected ID, but got %s", p.tk.String()))
 		}
 		p.move()
 	} else if p.match(lexical.ID) {
 		p.move()
 		p.paradatatail()
 	} else {
-		fmt.Println("syntax err: paradata err!")
+		p.Error(fmt.Sprintf("paradata err: expected ID or *ID, but got %s", p.tk.String()))
 	}
 }
 
@@ -419,13 +541,11 @@ func (p *Parser) block() {
 		p.move()
 		p.subprogram()
 		if !p.match(lexical.RBRACE) {
-			fmt.Println("syntax err: block err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("block err: expected '}', but got %s", p.tk.String()))
 		}
 		p.move()
 	} else {
-		fmt.Println("syntax err: block err!")
-		return
+		p.Error(fmt.Sprintf("block err: expected '{', but got %s", p.tk.String()))
 	}
 }
 
@@ -434,13 +554,11 @@ func (p *Parser) paradatatail() {
 	if p.match(lexical.LBRACK) {
 		p.move()
 		if !p.match(lexical.NUM) {
-			fmt.Println("syntax err: paradatatail err!")
-			return
+			p.Error(fmt.Sprintf("paradatatail err: expected NUM, but got %s", p.tk.String()))
 		}
 		p.move()
 		if !p.match(lexical.RBRACK) {
-			fmt.Println("syntax err: paradatatail err!")
-			return
+			p.Error(fmt.Sprintf("paradata err: expected ']', but got %s", p.tk.String()))
 		}
 		p.move()
 	}
@@ -484,9 +602,11 @@ func (p *Parser) matchExprFirst() bool {
 
 // <localdef> -> <type> <defdata> <deflist>
 func (p *Parser) localdef() {
-	p.typedec()
-	p.defdata()
-	p.deflist()
+	typ := p.typedec()
+	//TODO:将varr添加到符号表中
+	varr := p.defdata(false, typ)
+	table.Symtab.AddVar(varr)
+	p.deflist(false, typ)
 }
 
 // Statement
@@ -513,30 +633,26 @@ func (p *Parser) statement() {
 	case lexical.KW_BREAK:
 		p.move()
 		if !p.match(lexical.SEMICOLON) {
-			fmt.Println("syntax err: statement err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("statement err: expected ';', but got %s", p.tk.String()))
 		}
 		p.move()
 	case lexical.KW_CONINUE:
 		p.move()
 		if !p.match(lexical.SEMICOLON) {
-			fmt.Println("syntax err: statement err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("statement err: expected ';', but got %s", p.tk.String()))
 		}
 		p.move()
 	case lexical.KW_RETURN:
 		p.move()
 		p.altexpr()
 		if !p.match(lexical.SEMICOLON) {
-			fmt.Println("syntax err: statement err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("statement err: expected ';', but got %s", p.tk.String()))
 		}
 		p.move()
 	default:
 		p.altexpr()
 		if !p.match(lexical.SEMICOLON) {
-			fmt.Println("syntax err: statement err!")
-			os.Exit(0)
+			p.Error(fmt.Sprintf("statement err: expected ';', but got %s", p.tk.String()))
 		}
 		p.move()
 	}
@@ -544,132 +660,135 @@ func (p *Parser) statement() {
 
 // <whilestat> -> rsv_while lparen <altexpr> rparen <block>
 func (p *Parser) whilestat() {
+	_, lnum, cnum := p.lexer.GetPosition()
+	table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	if !p.match(lexical.KW_WHILE) {
-		fmt.Println("syntax err: whilestat err!")
+		p.Error(fmt.Sprintf("whilestat err: expected KW_WHILE, but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LPAREN) {
-		fmt.Println("syntax err: whilestat err!")
+		p.Error(fmt.Sprintf("whilestat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.altexpr()
 	if !p.match(lexical.RPAREN) {
-		fmt.Println("syntax err: whilestat err!")
+		p.Error(fmt.Sprintf("whilestat err: expected ')', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.block()
+	_, lnum, cnum = p.lexer.GetPosition()
+	table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 }
 
 // <forstat> -> rsv_for lparen <forinit> <altexpr> semicon <altexpr> rparen <block>
 func (p *Parser) forstat() {
+	_, lnum, cnum := p.lexer.GetPosition()
+	table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	if !p.match(lexical.KW_FOR) {
-		fmt.Println("syntax err: forstat err!")
-		return
+		p.Error(fmt.Sprintf("forstat err: expected KW_FOR, but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LPAREN) {
-		fmt.Println("syntax err: forstat err!")
-		return
+		p.Error(fmt.Sprintf("forstat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.forinit()
 	p.altexpr()
 	if !p.match(lexical.SEMICOLON) {
-		fmt.Println("syntax err: forstat err!")
-		return
+		p.Error(fmt.Sprintf("forstat err: expected ';', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.altexpr()
 	if !p.match(lexical.RPAREN) {
-		fmt.Println("syntax err: forstat err!")
-		return
+		p.Error(fmt.Sprintf("forstat err: expected ')', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.block()
+	_, lnum, cnum = p.lexer.GetPosition()
+	table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 }
 
 // <dowhilestat> -> rsv_do <block> rsv_while lparen <altexpr> rparen semicon
 func (p *Parser) dowhilestat() {
+	_, lnum, cnum := p.lexer.GetPosition()
+	table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	if !p.match(lexical.KW_DO) {
-		fmt.Println("595syntax err: dowhilestat err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("dowhilestat err: expected KW_DO, but got %s", p.tk.String()))
 	}
 	p.move()
 	p.block()
 	if !p.match(lexical.KW_WHILE) {
-		fmt.Println("600syntax err: dowhilestat err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("dowhilestat err: expected KW_WHILE, but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LPAREN) {
-		fmt.Println("605syntax err: dowhilestat err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("dowhilestat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.altexpr()
 	if !p.match(lexical.RPAREN) {
-		fmt.Println("611syntax err: dowhilestat err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("dowhilestat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.SEMICOLON) {
-		fmt.Println("616syntax err: dowhilestat err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("dowhilestat err: expected ';', but got %s", p.tk.String()))
 	}
 	p.move()
+	_, lnum, cnum = p.lexer.GetPosition()
+	table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 }
 
 // <ifstat> -> rsv_if lparen <expr> rparen <block> <elsestat>
 func (p *Parser) ifstat() {
+	_, lnum, cnum := p.lexer.GetPosition()
+	table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	if !p.match(lexical.KW_IF) {
-		fmt.Println("syntax err: ifstat err!")
-		return
+		p.Error(fmt.Sprintf("ifstat err: expected KW_IF, but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LPAREN) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("dowhilestat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.expr()
 	if !p.match(lexical.RPAREN) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("dowhilestat err: expected ')', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.block()
+	_, lnum, cnum = p.lexer.GetPosition()
+	table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	p.elsestat()
 }
 
 // <switchstat> -> rsv_switch lparen <expr> rparen lbrace <casestat> rbrace
 func (p *Parser) switchstat() {
+	_, lnum, cnum := p.lexer.GetPosition()
+	table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	if !p.match(lexical.KW_SWITCH) {
-		fmt.Println("syntax err: switchstat err!")
-		return
+		p.Error(fmt.Sprintf("switchstat err: expected KW_SWITCH, but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LPAREN) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("switchstat err: expected '(', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.expr()
 	if !p.match(lexical.RPAREN) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("switchstat err: expected ')', but got %s", p.tk.String()))
 	}
 	p.move()
 	if !p.match(lexical.LBRACE) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("switchstat err: expected '{', but got %s", p.tk.String()))
 	}
 	p.move()
 	p.casestat()
 	if !p.match(lexical.RBRACE) {
-		fmt.Println("syntax err: dowhilestat err!")
-		return
+		p.Error(fmt.Sprintf("switchstat err: expected '}', but got %s", p.tk.String()))
 	}
 	p.move()
+	_, lnum, cnum = p.lexer.GetPosition()
+	table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 }
 
 // <forinit>  ->  <localdef> | <altexpr>
@@ -695,7 +814,7 @@ func (p *Parser) casestat() {
 		p.move()
 		p.caselabel()
 		if !p.match(lexical.COLON) {
-			fmt.Println("syntax err: casestat err!")
+			p.Error(fmt.Sprintf("casestat err: expected ',', but got %s", p.tk.String()))
 		}
 		p.move()
 		p.subprogram()
@@ -703,12 +822,12 @@ func (p *Parser) casestat() {
 	} else if p.match(lexical.KW_DEFAULT) {
 		p.move()
 		if !p.match(lexical.COLON) {
-			fmt.Println("syntax err: casestat err!")
+			p.Error(fmt.Sprintf("casestat err: expected ',', but got %s", p.tk.String()))
 		}
 		p.move()
 		p.subprogram()
 	} else {
-		fmt.Println("syntax err: casestat err!")
+		p.Error(fmt.Sprintf("casestat err: expected 'case' or 'default', but got %s", p.tk.String()))
 	}
 }
 
@@ -718,12 +837,18 @@ func (p *Parser) caselabel() {
 }
 
 // <literal>	->	number | string | character
-func (p *Parser) literal() {
+func (p *Parser) literal() *table.Var {
 	if !p.match(lexical.NUM) && !p.match(lexical.STR) && !p.match(lexical.CHAR) {
-		fmt.Println("syntax err: literal err!")
-		os.Exit(0)
+		p.Error(fmt.Sprintf("literal err: expected NUM, STR or CHAR, but got %s", p.tk.String()))
+	}
+	v := table.NewLiteralVar(p.tk)
+	if p.tk.TokenTyp() == lexical.STR {
+		table.Symtab.AddStr(v)
+	} else {
+		table.Symtab.AddVar(v)
 	}
 	p.move()
+	return v
 }
 
 // <altexpr> ->	<expr> | ^
@@ -738,5 +863,39 @@ func (p *Parser) match(typ lexical.TokenType) bool {
 
 func (p *Parser) move() {
 	p.tk = p.lexer.NextToken()
-	fmt.Println(p.tk.String())
+}
+
+type OP_TYPE int
+
+const (
+	_                 = iota
+	OP_ASSIGN OP_TYPE = iota
+	OP_ADD
+	OP_SUB
+	OP_MUL
+	OP_DIV
+	OP_OR
+	OP_MOD
+	OP_INC
+	OP_DEC
+	OP_NOT
+	OP_LEA
+	OP_AND
+	OP_GT
+	OP_GE
+	OP_LT
+	OP_LE
+	OP_EQU
+	OP_NEQU
+	OP_COMMA
+	OP_COLON
+	OP_SEMICOLON
+	OP_LPAREN
+	OP_RPAREN
+	OP_LBARCE
+	OP_RBRACE
+)
+
+func GenTwoOp(lval *table.Var, op OP_TYPE, rval *table.Var) *table.Var {
+	return nil
 }

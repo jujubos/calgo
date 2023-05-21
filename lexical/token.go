@@ -211,15 +211,15 @@ type TEOF struct {
 }
 
 func (T *TID) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TNUM) String() string {
-	return fmt.Sprintf("%d:%s Value:%d", T.Type, T.Name, T.Value)
+	return fmt.Sprintf("<%s, %s, %d>", tokenTypeTable[T.Type], T.Name, T.Value)
 }
 
 func (T *TCHAR) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s, %d>:", tokenTypeTable[T.Type], T.Name, T.Value)
 }
 
 func (T *TSTR) String() string {
@@ -237,51 +237,51 @@ func (T *TSTR) String() string {
 			builder.WriteByte(c)
 		}
 	}
-	return fmt.Sprintf("%d:%s", T.Type, builder.String())
+	return fmt.Sprintf("%d:%s", tokenTypeTable[T.Type], builder.String())
 }
 
 func (T *TERR) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TEOF) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TADD) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TSUB) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TMUL) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TDIV) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TMOD) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TINC) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TDEC) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TNOT) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLEA) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TAND) String() string {
@@ -293,67 +293,67 @@ func (T *TOR) String() string {
 }
 
 func (T *TASSIGN) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TGT) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TGE) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLT) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLE) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TEQU) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TNEQU) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TCOMMA) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TCOLON) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TSEMICOLON) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLPARAN) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TRPARAN) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLBRACK) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TRBRACK) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TLBRACE) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 func (T *TRBRACE) String() string {
-	return fmt.Sprintf("%d:%s", T.Type, T.Name)
+	return fmt.Sprintf("<%s, %s>:", tokenTypeTable[T.Type], T.Name)
 }
 
 // 关键字和标识符
@@ -490,6 +490,7 @@ func (T *TRBRACE) TokenTyp() TokenType {
 }
 
 const (
+	_             = iota
 	ERR TokenType = iota
 	EOF
 	ID
@@ -540,5 +541,53 @@ const (
 	RBRACE
 )
 
-var EOF_TOKEN = TEOF{Type: EOF, Name: "EOF", Value: "EOF"}
-var ERR_TOKEN = TERR{Type: ERR, Name: "ERR", Value: "ERR"}
+var tokenTypeTable = map[TokenType]string{
+	1:  "Error",
+	2:  "EOF",
+	3:  "Identifier",
+	4:  "Character",
+	5:  "Number",
+	6:  "Row",
+	7:  "KW_INT",
+	8:  "KW_CHAR",
+	9:  "KW_VOID",
+	10: "KW_EXTERN",
+	11: "KW_IF",
+	12: "KW_ELSE",
+	13: "KW_SWITCH",
+	14: "KW_CASE",
+	15: "KW_DEFAULT",
+	16: "KW_WHILE",
+	17: "KW_DO",
+	18: "KW_FOR",
+	19: "KW_BREAK",
+	20: "KW_CONTINUE",
+	21: "KW_RETURN",
+	22: "ADD",
+	23: "SUB",
+	24: "MUL",
+	25: "DIV",
+	26: "MOD",
+	27: "INC",
+	28: "DEC",
+	29: "NOT",
+	30: "LEA",
+	31: "AND",
+	32: "OR",
+	33: "ASSIGN",
+	34: "GT",
+	35: "GE",
+	36: "LT",
+	37: "LE",
+	38: "EQU",
+	39: "NEQU",
+	40: "COMMA",
+	41: "COLON",
+	42: "SEMICOLON",
+	43: "LPAREN",
+	44: "RPAREN",
+	45: "LBRACK",
+	46: "RBRACK",
+	47: "LBRACE",
+	48: "RBRACE",
+}

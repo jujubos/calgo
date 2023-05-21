@@ -2,6 +2,7 @@ package lexical
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -24,9 +25,28 @@ var kwords = map[string]TokenType{
 	"return":   KW_RETURN,
 }
 
+var TypeTable = map[TokenType]string{
+	0:       "NoType",
+	KW_INT:  "int",
+	KW_CHAR: "char",
+	KW_VOID: "void",
+}
+
+var lexErrorTable = map[string]string{
+	"": "",
+}
+
 type Lexer struct {
-	ch      byte
-	scanner *bufio.Reader
+	ch       byte
+	scanner  *bufio.Reader
+	lineNum  int
+	colNum   int
+	filename string
+	newline  bool
+}
+
+func (l *Lexer) GetPosition() (string, int, int) {
+	return l.filename, l.lineNum, l.colNum
 }
 
 func NewLexer(filename string) *Lexer {
@@ -35,10 +55,20 @@ func NewLexer(filename string) *Lexer {
 		return nil
 	}
 	lexer := &Lexer{
-		scanner: bufio.NewReader(file),
+		scanner:  bufio.NewReader(file),
+		filename: filename,
+		lineNum:  0,
+		colNum:   0,
+		newline:  true,
 	}
 	lexer.NextChar()
 	return lexer
+}
+
+func (l *Lexer) Error(errtk Token) Token {
+	fmt.Printf("词法错误:%s in %s:<%d, %d>\n", errtk.String(), l.filename, l.lineNum, l.colNum)
+	os.Exit(0)
+	return errtk
 }
 
 func (l *Lexer) NextToken() Token {
@@ -95,7 +125,7 @@ func (l *Lexer) NextToken() Token {
 						return &TNUM{Type: NUM, Name: builder.String(), Value: v}
 
 					} else {
-						return &ERR_TOKEN
+						return l.Error(&TERR{Type: ERR, Name: "十六进制没有实体数据"})
 					}
 				} else if l.ch == 'b' {
 					builder.WriteByte(l.ch)
@@ -111,7 +141,7 @@ func (l *Lexer) NextToken() Token {
 						}
 						return &TNUM{Type: NUM, Name: builder.String(), Value: v}
 					} else {
-						return &ERR_TOKEN
+						return l.Error(&TERR{Type: ERR, Name: "二进制没有实体数据"})
 					}
 				} else if l.ch >= '0' && l.ch <= '7' {
 					for l.ch >= '0' && l.ch <= '7' {
@@ -137,13 +167,16 @@ func (l *Lexer) NextToken() Token {
 		} else if c == '\'' {
 			var ch byte
 			l.NextChar()
-			if l.ch == 0 || l.ch == '\n' || l.ch == '\'' {
-				return &ERR_TOKEN
+			if l.ch == 0 || l.ch == '\n' {
+				return l.Error(&TERR{Type: ERR, Name: "字符丢失右单引号"})
+			}
+			if l.ch == '\'' {
+				return l.Error(&TERR{Type: ERR, Name: "不支持空字符"})
 			}
 			if l.ch == '\\' {
 				l.NextChar()
 				if l.ch == 0 || l.ch == '\n' || (l.ch != 'n' && l.ch != 't' && l.ch != '\\' && l.ch != '\'' && l.ch != '0') {
-					return &ERR_TOKEN
+					return l.Error(&TERR{Type: ERR, Name: "不支持的转义字符"})
 				}
 				ch = l.ch
 				l.NextChar()
@@ -169,27 +202,27 @@ func (l *Lexer) NextToken() Token {
 					l.NextChar()
 					return token
 				} else {
-					return &ERR_TOKEN
+					return l.Error(&TERR{Type: ERR, Name: "字符缺失右单引号"})
 				}
 			} else {
 				ch = l.ch
 				l.NextChar()
 				if l.ch == '\'' {
 					l.NextChar()
-					return &TCHAR{Type: CHAR, Name: string(ch)}
+					return &TCHAR{Type: CHAR, Name: string(ch), Value: ch}
 				} else {
-					return &ERR_TOKEN
+					return l.Error(&TERR{Type: ERR, Name: "字符缺失右单引号"})
 				}
 			}
 		} else if c == '"' {
 			l.NextChar()
 			for {
 				if l.ch == 0 || l.ch == '\n' {
-					return &ERR_TOKEN
+					return l.Error(&TERR{Type: ERR, Name: "字符串缺失右双引号"})
 				} else if l.ch == '\\' {
 					l.NextChar()
 					if l.ch == 0 || l.ch == '\n' {
-						return &ERR_TOKEN
+						return l.Error(&TERR{Type: ERR, Name: "不合法的转义字符：转义字符后文件结束了或者跟着换行都不对"})
 					} else if l.ch == 't' {
 						builder.WriteByte('\t')
 						l.NextChar()
@@ -200,7 +233,7 @@ func (l *Lexer) NextToken() Token {
 						builder.WriteByte('"')
 						l.NextChar()
 					} else {
-						return &ERR_TOKEN
+						return l.Error(&TERR{Type: ERR, Name: "不合法的转义字符: 只能转义:t,n,\""})
 					}
 				} else if l.ch == '"' {
 					l.NextChar()
@@ -245,6 +278,13 @@ func (l *Lexer) NextToken() Token {
 				} else {
 					return &TLEA{Type: LEA, Name: "&"}
 				}
+			case '|':
+				l.NextChar()
+				if l.ch != '|' {
+					return &TERR{Type: ERR, Name: "不存在词法记号: '|'"}
+				}
+				l.NextChar()
+				return &TOR{Type: OR, Name: "||"}
 			case '>':
 				l.NextChar()
 				if l.ch == '=' {
@@ -305,7 +345,10 @@ func (l *Lexer) NextToken() Token {
 				l.NextChar()
 				return &TRBRACE{Type: RBRACE, Name: "}"}
 			default:
-				return &ERR_TOKEN
+				if l.ch == 0 {
+					return &TEOF{Type: EOF, Name: "End of File!"}
+				}
+				return l.Error(&TERR{Type: ERR, Name: "词法记号不存在"})
 			}
 		}
 	}
@@ -325,6 +368,17 @@ func (l *Lexer) NextChar() {
 	c, err := l.scanner.ReadByte()
 	if err != nil {
 		l.ch = 0
+	}
+	if l.newline {
+		l.lineNum++
+		l.colNum = 1
+	} else {
+		l.colNum++
+	}
+	if c == '\n' {
+		l.newline = true
+	} else {
+		l.newline = false
 	}
 	l.ch = c
 }
