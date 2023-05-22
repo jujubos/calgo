@@ -101,11 +101,11 @@ func GenAssign2(lval *Var, rval *Var) *Var {
 	return lval
 }
 
-func GenTwoOp(op Operator, lvar, rvar *Var) *Var {
+func GenTwoOp(op lexical.TokenType, lvar, rvar *Var) *Var {
 	if lvar.IsVoid() || rvar.IsVoid() {
 		Error("参与表达式运算的变量类型不能为void")
 	}
-	if op == OP_AS {
+	if op == lexical.ASSIGN {
 		return GenAssign2(lvar, rvar)
 	}
 	if lvar.IsRef() {
@@ -115,36 +115,36 @@ func GenTwoOp(op Operator, lvar, rvar *Var) *Var {
 		rvar = GenAssign1(rvar)
 	}
 	switch op {
-	case OP_OR:
+	case lexical.OR:
 		return GenOr(lvar, rvar)
-	case OP_AND:
+	case lexical.AND:
 		return GenAnd(lvar, rvar)
-	case OP_EQU:
+	case lexical.EQU:
 		return GenEQU(lvar, rvar)
-	case OP_NEQU:
+	case lexical.NEQU:
 		return GenNEQU(lvar, rvar)
-	case OP_ADD:
+	case lexical.ADD:
 		return GenAdd(lvar, rvar)
-	case OP_SUB:
+	case lexical.SUB:
 		return GenSub(lvar, rvar)
 	}
 	if !lvar.IsBase() || rvar.IsBase() {
 		Error(fmt.Sprintf("该类型不支持这种运算:%d", op))
 	}
 	switch op {
-	case OP_GT:
+	case lexical.GT:
 		return GenGT(lvar, rvar)
-	case OP_GE:
+	case lexical.GE:
 		return GenGE(lvar, rvar)
-	case OP_LT:
+	case lexical.LT:
 		return GenLT(lvar, rvar)
-	case OP_LE:
+	case lexical.LE:
 		return GenLE(lvar, rvar)
-	case OP_MUL:
+	case lexical.MUL:
 		return GenMul(lvar, rvar)
-	case OP_DIV:
+	case lexical.DIV:
 		return GenDiv(lvar, rvar)
-	case OP_MOD:
+	case lexical.MOD:
 		return GenMod(lvar, rvar)
 	}
 	Error(fmt.Sprintf("不支持的双目运算:%d", op))
@@ -288,4 +288,80 @@ func GetStep(v *Var) *Var {
 	}
 	Error("GetStep:void不能参与加法运算")
 	return nil
+}
+
+/*
+++v, --v, &v, *v, !v, -v
+*/
+func GenOneOpLeft(op lexical.TokenType, v *Var) *Var {
+	if v.IsVoid() {
+		Error("GenOneOpLeft:不支持void类型")
+	}
+	switch op {
+	case lexical.INC:
+		return GenIncL(v)
+	case lexical.DEC:
+		return GenDecL(v)
+	case lexical.LEA:
+		return GenLea(v)
+	case lexical.MUL:
+		return GenPtr(v)
+	case lexical.NOT:
+		return GenNot(v)
+	case lexical.SUB:
+		return GenMinus(v)
+	}
+	Error("GenOneOpLeft：不支持的运算符")
+	return nil
+}
+
+/*
+if v is ref, then tmp = v + step
+else tmp = v + 1
+*/
+//TODO:这里++v不会产生临时变量，相当于提前做了优化。 思考：为什么？
+func GenIncL(v *Var) *Var {
+	if !v.IsLeft {
+		Error("GenIncL: 变量不是左值")
+	}
+	if v.IsRef() {
+		t1 := GenAssign1(v)           //t1 = *p
+		t2 := GenAdd(t1, GetStep(t1)) //t2 = t1 + 1,
+		GenAssign2(v, t2)             //*p = t2
+	} else {
+		Symtab.AddInst(NewInst(OP_ADD, v, v, One))
+	}
+	return v
+}
+
+func GenDecL(v *Var) *Var {
+	if !v.IsLeft {
+		Error("GenIncL: 变量不是左值")
+	}
+	if v.IsRef() {
+		t1 := GenAssign1(v)           //t1 = *p
+		t2 := GenSub(t1, GetStep(t1)) //t2 = t1 - 1,
+		GenAssign2(v, t2)             //*p = t2
+	} else {
+		Symtab.AddInst(NewInst(OP_SUB, v, v, One))
+	}
+	return v
+}
+
+// -v
+func GenMinus(v *Var) *Var {
+	if !v.IsBase() {
+		Error("GenMinus:不支持的变量类型")
+	}
+	tmp := NewTmpVar(Symtab.ScopePath, lexical.KW_INT, false)
+	Symtab.AddVar(tmp)
+	Symtab.AddInst(NewInst(OP_NEG, tmp, v, nil))
+	return tmp
+}
+
+func GenNot(v *Var) *Var {
+	tmp := NewTmpVar(Symtab.ScopePath, lexical.KW_INT, false)
+	Symtab.AddVar(tmp)
+	Symtab.AddInst(NewInst(OP_NOT, tmp, v, nil))
+	return tmp
 }
