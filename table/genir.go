@@ -365,3 +365,42 @@ func GenNot(v *Var) *Var {
 	Symtab.AddInst(NewInst(OP_NOT, tmp, v, nil))
 	return tmp
 }
+
+func GenOneOpRight(op lexical.TokenType, v *Var) *Var {
+	if v.IsVoid() || !v.IsLeft {
+		Error("GenOneOpRight:不支持的变量类型")
+	}
+	if op == lexical.INC {
+		return GenIncR(v)
+	} else if op == lexical.DEC {
+		return GenDecR(v)
+	} else {
+		Error("GenOneOpRight:不支持的操作类型")
+	}
+	return nil
+}
+
+/*
+(*p) ++, i ++
+*/
+func GenIncR(v *Var) *Var {
+	t1 := GenAssign1(v)
+	if v.IsRef() {
+		t2 := GenAdd(t1, One)
+		GenAssign2(v, t2)
+	} else {
+		Symtab.AddInst(NewInst(OP_ADD, v, v, One))
+	}
+	return t1
+}
+
+func GenDecR(v *Var) *Var {
+	t1 := GenAssign1(v)
+	if v.IsRef() {
+		t2 := GenSub(t1, One)
+		GenAssign2(v, t2)
+	} else {
+		Symtab.AddInst(NewInst(OP_SUB, v, v, One))
+	}
+	return t1
+}
