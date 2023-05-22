@@ -404,3 +404,15 @@ func GenDecR(v *Var) *Var {
 	}
 	return t1
 }
+
+func GenArray(arr *Var, idx *Var) *Var {
+	if arr.IsVoid() || arr.IsBase() || !idx.IsBase() || idx.IsVoid() {
+		Error("GenArray: 不支持的变量类型")
+	}
+	return GenPtr(GenAdd(arr, idx))
+	/*TODO
+	这里只产生了一条中间代码： t1 = arr + idx，
+	并产生了一个临时对象t2，t2是*t1的结果。后面该怎么使用呢？为什么这就是数组索引的翻译结果了？
+	*/
+}
+
