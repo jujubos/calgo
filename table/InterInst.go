@@ -56,6 +56,19 @@ func NewRetvInst(retv *Var, retp *InterInst) *InterInst {
 	}
 }
 
+func NewProcInst(f *Fun) *InterInst {
+	return &InterInst{
+		Fun: f,
+	}
+}
+
+func NewCallInst(f *Fun, res *Var) *InterInst {
+	return &InterInst{
+		Fun:    f,
+		Result: res,
+	}
+}
+
 const (
 	OP_NOP Operator = iota
 	OP_DEC

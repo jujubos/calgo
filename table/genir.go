@@ -416,3 +416,25 @@ func GenArray(arr *Var, idx *Var) *Var {
 	*/
 }
 
+func GenPara(arg *Var) {
+	if arg.IsRef() {
+		arg = GenAssign1(arg)
+	}
+	Symtab.AddInst(NewInst(OP_ARG, nil, arg, nil))
+}
+
+func GenCall(fun *Fun, args []*Var) *Var {
+	for i := len(args) - 1; i >= 0; i-- {
+		GenPara(args[i])
+	}
+	if fun.Typ == lexical.KW_VOID {
+		Symtab.AddInst(NewProcInst(fun))
+		return Void
+	} else {
+		tmp := NewTmpVar(Symtab.ScopePath, fun.Typ, false)
+		Symtab.AddVar(tmp)
+		Symtab.AddInst(NewCallInst(fun, tmp))
+		return tmp
+	}
+	return nil
+}

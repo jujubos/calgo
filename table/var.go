@@ -27,7 +27,7 @@ type Var struct {
 	Offset    int64
 }
 
-// 非数组变量，指针
+// 非数组、非指针
 func NewVar(sp []int, ext bool, t lexical.TokenType, ptr bool, name string, init *Var) *Var {
 	v := &Var{
 		ScopePath: sp,
@@ -110,6 +110,14 @@ func CopyVar(sp []int, v *Var) *Var {
 	return tmp
 }
 
+func NewVoidVar() *Var {
+	v := &Var{}
+	v.setName("<void>")
+	v.Typ = lexical.KW_VOID
+	v.IsPtr = true
+	return v
+}
+
 func (v *Var) IsVoid() bool {
 	return v.Typ == lexical.KW_VOID
 }
@@ -190,5 +198,6 @@ func (v *Var) IsRef() bool {
 	return v.Ptr != nil
 }
 
+var Void = NewVoidVar()
 var One = NewIntVar(1)
 var Four = NewIntVar(1)
