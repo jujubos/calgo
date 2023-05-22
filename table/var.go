@@ -3,7 +3,6 @@ package table
 import (
 	"calgo/lexical"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -82,9 +81,37 @@ func NewLiteralVar(tk lexical.Token) *Var {
 	return v
 }
 
-func Error(info string) {
-	fmt.Println(fmt.Sprintf("%s", info))
-	os.Exit(0)
+func NewIntVar(val int) *Var {
+	v := &Var{}
+	v.setName("<int>")
+	v.setType(lexical.KW_INT)
+	v.IntVal = int64(val)
+	v.Literal = true
+	return v
+}
+
+func NewTmpVar(sp []int, typ lexical.TokenType, isptr bool) *Var {
+	v := &Var{
+		ScopePath: sp,
+	}
+	v.setType(typ)
+	v.setPtr(isptr)
+	v.setName("")
+	v.IsLeft = false
+	return v
+}
+
+func CopyVar(sp []int, v *Var) *Var {
+	tmp := &Var{ScopePath: sp}
+	tmp.setType(v.Typ)
+	tmp.setPtr(v.IsPtr || v.IsArray)
+	tmp.setName("")
+	tmp.IsLeft = false
+	return tmp
+}
+
+func (v *Var) IsVoid() bool {
+	return v.Typ == lexical.KW_VOID
 }
 
 func (v *Var) setArray(length int64) {
@@ -155,10 +182,13 @@ func (v *Var) Row() []string {
 	return strings.Split(builder.String(), ",")
 }
 
-var lbnum = 0
-
-func GenLb() string {
-	lbnum++
-	lb := ".L"
-	return lb + string(lbnum)
+func (v *Var) IsBase() bool {
+	return !v.IsArray && !v.IsPtr
 }
+
+func (v *Var) IsRef() bool {
+	return v.Ptr != nil
+}
+
+var One = NewIntVar(1)
+var Four = NewIntVar(1)

@@ -127,11 +127,15 @@ func (p *Parser) idtail(ext bool, typ lexical.TokenType, isPtr bool, name string
 		p.move()
 		_, lnum, cnum := p.lexer.GetPosition()
 		table.Symtab.Enter(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
+		var paralist []*table.Var
+		p.para(&paralist)
 		if !p.match(lexical.RPAREN) {
 			p.Error(fmt.Sprintf("idtail err: expected ')', but got %s", p.tk.String()))
 		}
 		p.move()
-		p.funtail()
+		fun := table.NewFun(ext, typ, name, paralist)
+		//TODO
+		p.funtail(fun)
 		_, lnum, cnum = p.lexer.GetPosition()
 		table.Symtab.Leave(fmt.Sprintf("line:%d, col:%d token:%s", lnum, cnum, p.tk.String()))
 	} else { //变量
@@ -167,20 +171,25 @@ func (p *Parser) defdata(ext bool, typ lexical.TokenType) *table.Var {
 }
 
 // <para> ->	<type> <paradata> <paralist> | ^
-func (p *Parser) para() {
+func (p *Parser) para(paralist *[]*table.Var) {
 	if p.match(lexical.KW_INT) || p.match(lexical.KW_CHAR) || p.match(lexical.KW_VOID) {
-		p.typedec()
-		p.paradata()
-		p.paralist()
+		typ := p.typedec()
+		v := p.paradata(typ)
+		(*paralist) = append((*paralist), v)
+		table.Symtab.AddVar(v)
+		p.paralist(paralist)
 	}
 }
 
 // <funtail> -> <block> | semicon
-func (p *Parser) funtail() {
-	if p.match(lexical.SEMICOLON) {
+func (p *Parser) funtail(fun *table.Fun) {
+	if p.match(lexical.SEMICOLON) { //函数声明
 		p.move()
-	} else {
+		table.Symtab.DecFun(fun)
+	} else { //函数定义
+		table.Symtab.DefFun(fun)
 		p.block()
+		table.Symtab.EndDefFun()
 	}
 }
 
@@ -510,28 +519,35 @@ func (p *Parser) arglist() {
 }
 
 // <paradata> -> mul id | id <paradatatail>
-func (p *Parser) paradata() {
-	if p.match(lexical.MUL) {
+// 参数：指针、非指针（普通变量和数组）
+func (p *Parser) paradata(typ lexical.TokenType) *table.Var {
+	if p.match(lexical.MUL) { //指针
 		p.move()
 		if !p.match(lexical.ID) {
 			p.Error(fmt.Sprintf("paradata err: expected ID, but got %s", p.tk.String()))
 		}
+		name := p.tk.(*lexical.TID).Name
 		p.move()
-	} else if p.match(lexical.ID) {
+		return table.NewVar(table.Symtab.ScopePath, false, typ, true, name, nil)
+	} else if p.match(lexical.ID) { //普通变量和数组
+		name := p.tk.(*lexical.TID).Name
 		p.move()
-		p.paradatatail()
+		return p.paradatatail(typ, name)
 	} else {
 		p.Error(fmt.Sprintf("paradata err: expected ID or *ID, but got %s", p.tk.String()))
 	}
+	return nil
 }
 
 // <paralist>	-> comma <type> <paradata> <paralist> | ^
-func (p *Parser) paralist() {
+func (p *Parser) paralist(plist *[]*table.Var) {
 	if p.match(lexical.COMMA) {
 		p.move()
-		p.typedec()
-		p.paradata()
-		p.paralist()
+		typ := p.typedec()
+		v := p.paradata(typ)
+		*plist = append((*plist), v)
+		table.Symtab.AddVar(v)
+		p.paralist(plist)
 	}
 }
 
@@ -550,7 +566,7 @@ func (p *Parser) block() {
 }
 
 // <paradatatail> -> lbrack num rbrack | ^
-func (p *Parser) paradatatail() {
+func (p *Parser) paradatatail(typ lexical.TokenType, name string) *table.Var {
 	if p.match(lexical.LBRACK) {
 		p.move()
 		if !p.match(lexical.NUM) {
@@ -562,6 +578,7 @@ func (p *Parser) paradatatail() {
 		}
 		p.move()
 	}
+	return table.NewVar(table.Symtab.ScopePath, false, typ, false, name, nil)
 }
 
 /*
