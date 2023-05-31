@@ -1,0 +1,33 @@
+int n, m, k = 3;
+char * p = "abc\n";
+int main() {
+    int a, b, c;
+    c = b --;
+    while (a < 0) {
+
+    }
+
+    if (a < b) {
+     a = a >= b;
+    }
+
+    switch(a) {
+    case 'a':
+        a = b;
+    default:
+        break;
+    }
+    int n = 100;
+    for(int i = 0; i < n; i ++) {
+        if ( n == 0 ) {
+           continue;
+        }
+    }
+}
+
+int print(int t) {}
+
+int fun() {
+    print(10);
+    return 10;
+}

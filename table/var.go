@@ -3,6 +3,7 @@ package table
 import (
 	"calgo/lexical"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +33,7 @@ func NewVar(sp []int, ext bool, t lexical.TokenType, ptr bool, name string, init
 	v := &Var{
 		ScopePath: sp,
 		Externed:  ext,
+		IsLeft:    true, //默认可以作为左值. TODO: 思考为什么?
 	}
 	v.setType(t)
 	v.setPtr(ptr)
@@ -196,6 +198,90 @@ func (v *Var) IsBase() bool {
 
 func (v *Var) IsRef() bool {
 	return v.Ptr != nil
+}
+
+// Finished
+// 变量声明初始化部分由setInit处理
+// 只有局部变量需要生成初始化指令：
+// 如果显式初始化，则使用初始化表达式的值作为初始值；否则，使用默认值
+func (v *Var) SetInit() bool {
+	vinit := v.initData
+	if vinit == nil {
+		return false
+	}
+	v.inited = false
+	if v.Externed {
+		Error("声明不允许初始化")
+	} else if !TypeCheck(v, vinit) {
+		Error("类型不兼容")
+	} else if vinit.Literal {
+		v.inited = true
+		if vinit.IsArray { //数组字面量，只能是字符串字面量，如"abc"
+			v.PtrVal = vinit.Name
+		} else { //整数，字符
+			var s int64
+			if vinit.Typ == lexical.CHAR {
+				s = int64(vinit.CharVal)
+			} else {
+				s = vinit.IntVal
+			}
+			if v.Typ == lexical.CHAR {
+				v.CharVal = byte(s)
+			} else {
+				v.IntVal = s
+			}
+		}
+	} else { //非Literal，那就是变量
+		if len(v.ScopePath) == 1 { //全局变量
+			jd, _ := json.Marshal(vinit)
+			Error(fmt.Sprintf("SetInit err:全局变量初始化必须是常量, %s, %v", v.Name, string(jd)))
+		} else { //非全局变量，那就是局部变量
+			return true
+		}
+	}
+	return false
+}
+
+func (v *Var) IsChar() bool {
+	return v.Typ == lexical.KW_CHAR
+}
+
+func (v *Var) GenRawStr() string {
+	builder := strings.Builder{}
+	chpass := false
+	for i := 0; i < len(v.StrVal); i++ {
+		c := v.StrVal[i]
+		if c == '\n' || c == '\t' || c == '"' {
+			if chpass {
+				builder.WriteString("\",")
+			}
+			builder.WriteString(strconv.Itoa(int(c)))
+			builder.WriteString(",")
+			chpass = false
+		} else {
+			if chpass {
+				builder.WriteString(string(c))
+			} else {
+				builder.WriteString("\"" + string(c))
+			}
+			if i == len(v.StrVal)-1 {
+				builder.WriteString("\"")
+			}
+			chpass = true
+		}
+	}
+	ret := builder.String()
+	if ret[len(ret)-1] == ',' { //如果最后一个字符是逗号，去掉它
+		ret = ret[:len(ret)-1]
+	}
+	return ret
+}
+
+func (v *Var) GetVal() int64 {
+	if v.Typ == lexical.KW_CHAR {
+		return int64(v.CharVal)
+	}
+	return v.IntVal
 }
 
 var Void = NewVoidVar()

@@ -12,7 +12,7 @@ type Fun struct {
 	MaxDepth    int
 	CurEsp      int
 	ScopeEsp    []int
-	interCode   []*InterInst
+	Intercode   []*InterInst `json:"-"`
 	returnPoint *InterInst
 }
 
@@ -68,45 +68,6 @@ func (f *Fun) MatchArgs(args []*Var) bool {
 	return true
 }
 
-// Finished
-// 变量声明初始化部分由setInit处理
-func (v *Var) SetInit() bool {
-	vinit := v.initData
-	if vinit == nil {
-		return false
-	}
-	v.inited = false
-	if v.Externed {
-		Error("声明不允许初始化")
-	} else if !TypeCheck(v, vinit) {
-		Error("类型不兼容")
-	} else if vinit.Literal {
-		v.inited = true
-		if vinit.IsArray { //数组字面量，只能是字符串字面量，如"abc"
-			v.PtrVal = vinit.Name
-		} else { //整数，字符
-			var s int64
-			if vinit.Typ == lexical.CHAR {
-				s = int64(vinit.CharVal)
-			} else {
-				s = vinit.IntVal
-			}
-			if v.Typ == lexical.CHAR {
-				v.CharVal = byte(s)
-			} else {
-				v.IntVal = s
-			}
-		}
-	} else { //非字面量，那就是变量
-		if len(v.ScopePath) == 1 { //全局变量
-			Error("全局变量初始化必须是常量")
-		} else { //非全局变量，那就是局部变量
-			return true
-		}
-	}
-	return false
-}
-
 func (f *Fun) EnterScope() {
 	f.ScopeEsp = append(f.ScopeEsp, 0)
 }
@@ -120,7 +81,7 @@ func (f *Fun) LeaveScope() {
 }
 
 func (f *Fun) AddInst(inst *InterInst) {
-	f.interCode = append(f.interCode, inst)
+	f.Intercode = append(f.Intercode, inst)
 }
 
 func (f *Fun) SetReturnPoint(retp *InterInst) {
@@ -129,4 +90,12 @@ func (f *Fun) SetReturnPoint(retp *InterInst) {
 
 func (f *Fun) GetReturnPoint() *InterInst {
 	return f.returnPoint
+}
+
+func (f *Fun) Locate(v *Var) {
+	size := v.Size
+	size += (4 - size%4) % 4
+	f.ScopeEsp[len(f.ScopeEsp)-1] += int(size)
+	f.CurEsp += int(size)
+	v.Offset = int64(-f.CurEsp)
 }

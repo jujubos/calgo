@@ -1,0 +1,105 @@
+0:  55                      push   ebp
+1:  8b ec                   mov    ebp,esp
+3:  81 ec 00 00 00 00       sub    esp,0x0
+9:  8b e5                   mov    esp,ebp
+b:  5d                      pop    ebp
+c:  c3                      ret
+d:  55                      push   ebp
+e:  8b ec                   mov    ebp,esp
+10: 81 ec 04 00 00 00       sub    esp,0x4
+16: b8 0a 00 00 00          mov    eax,0xa
+1b: 50                      push   eax
+1c: e8 df ff ff ff          call   0x0
+21: 81 c4 04 00 00 00       add    esp,0x4
+27: 89 45 fc                mov    DWORD PTR [ebp-0x4],eax
+2a: b8 0a 00 00 00          mov    eax,0xa
+2f: e9 cc ff ff ff          jmp    0x0
+34: 8b e5                   mov    esp,ebp
+36: 5d                      pop    ebp
+37: c3                      ret
+38: 55                      push   ebp
+39: 8b ec                   mov    ebp,esp
+3b: 81 ec 30 00 00 00       sub    esp,0x30
+41: b8 00 00 00 00          mov    eax,0x0
+46: 89 45 fc                mov    DWORD PTR [ebp-0x4],eax
+49: b8 00 00 00 00          mov    eax,0x0
+4e: 89 45 f8                mov    DWORD PTR [ebp-0x8],eax
+51: b8 00 00 00 00          mov    eax,0x0
+56: 89 45 f4                mov    DWORD PTR [ebp-0xc],eax
+59: 8b 45 f8                mov    eax,DWORD PTR [ebp-0x8]
+5c: 89 45 f0                mov    DWORD PTR [ebp-0x10],eax
+5f: 8b 45 f8                mov    eax,DWORD PTR [ebp-0x8]
+62: bb 01 00 00 00          mov    ebx,0x1
+67: 2b c3                   sub    eax,ebx
+69: 89 45 f8                mov    DWORD PTR [ebp-0x8],eax
+6c: 8b 45 f0                mov    eax,DWORD PTR [ebp-0x10]
+6f: 89 45 f4                mov    DWORD PTR [ebp-0xc],eax
+72: 8b 45 fc                mov    eax,DWORD PTR [ebp-0x4]
+75: bb 00 00 00 00          mov    ebx,0x0
+7a: b9 00 00 00 00          mov    ecx,0x0
+7f: 3b c3                   cmp    eax,ebx
+81: 0f 9c c1                setl   cl
+84: 89 4d ec                mov    DWORD PTR [ebp-0x14],ecx
+87: 8b 45 ec                mov    eax,DWORD PTR [ebp-0x14]
+8a: 81 f8 00 00 00 00       cmp    eax,0x0
+90: 0f 84 6a ff ff ff       je     0x0
+96: e9 d7 ff ff ff          jmp    0x72
+9b: 8b 45 fc                mov    eax,DWORD PTR [ebp-0x4]
+9e: 8b 5d f8                mov    ebx,DWORD PTR [ebp-0x8]
+a1: b9 00 00 00 00          mov    ecx,0x0
+a6: 3b c3                   cmp    eax,ebx
+a8: 0f 9c c1                setl   cl
+ab: 89 4d e8                mov    DWORD PTR [ebp-0x18],ecx
+ae: 8b 45 e8                mov    eax,DWORD PTR [ebp-0x18]
+b1: 81 f8 00 00 00 00       cmp    eax,0x0
+b7: 0f 84 43 ff ff ff       je     0x0
+bd: 8b 45 fc                mov    eax,DWORD PTR [ebp-0x4]
+c0: 8b 5d f8                mov    ebx,DWORD PTR [ebp-0x8]
+c3: b9 00 00 00 00          mov    ecx,0x0
+c8: 3b c3                   cmp    eax,ebx
+ca: 0f 9d c1                setge  cl
+cd: 89 4d e4                mov    DWORD PTR [ebp-0x1c],ecx
+d0: 8b 45 e4                mov    eax,DWORD PTR [ebp-0x1c]
+d3: 89 45 fc                mov    DWORD PTR [ebp-0x4],eax
+d6: 8b 45 fc                mov    eax,DWORD PTR [ebp-0x4]
+d9: b3 61                   mov    bl,0x61
+db: 3b c3                   cmp    eax,ebx
+dd: 0f 85 1d ff ff ff       jne    0x0
+e3: 8b 45 f8                mov    eax,DWORD PTR [ebp-0x8]
+e6: 89 45 fc                mov    DWORD PTR [ebp-0x4],eax
+e9: e9 12 ff ff ff          jmp    0x0
+ee: b8 64 00 00 00          mov    eax,0x64
+f3: 89 45 e0                mov    DWORD PTR [ebp-0x20],eax
+f6: b8 00 00 00 00          mov    eax,0x0
+fb: 89 45 dc                mov    DWORD PTR [ebp-0x24],eax
+fe: 8b 45 dc                mov    eax,DWORD PTR [ebp-0x24]
+101:    8b 5d e0                mov    ebx,DWORD PTR [ebp-0x20]
+104:    b9 00 00 00 00          mov    ecx,0x0
+109:    3b c3                   cmp    eax,ebx
+10b:    0f 9c c1                setl   cl
+10e:    89 4d d8                mov    DWORD PTR [ebp-0x28],ecx
+111:    8b 45 d8                mov    eax,DWORD PTR [ebp-0x28]
+114:    81 f8 00 00 00 00       cmp    eax,0x0
+11a:    0f 84 e0 fe ff ff       je     0x0
+120:    e9 db fe ff ff          jmp    0x0
+125:    8b 45 dc                mov    eax,DWORD PTR [ebp-0x24]
+128:    89 45 d4                mov    DWORD PTR [ebp-0x2c],eax
+12b:    8b 45 dc                mov    eax,DWORD PTR [ebp-0x24]
+12e:    bb 01 00 00 00          mov    ebx,0x1
+133:    03 c3                   add    eax,ebx
+135:    89 45 dc                mov    DWORD PTR [ebp-0x24],eax
+138:    e9 c1 ff ff ff          jmp    0xfe
+13d:    8b 45 e0                mov    eax,DWORD PTR [ebp-0x20]
+140:    bb 00 00 00 00          mov    ebx,0x0
+145:    b9 00 00 00 00          mov    ecx,0x0
+14a:    3b c3                   cmp    eax,ebx
+14c:    0f 94 c1                sete   cl
+14f:    89 4d d0                mov    DWORD PTR [ebp-0x30],ecx
+152:    8b 45 d0                mov    eax,DWORD PTR [ebp-0x30]
+155:    81 f8 00 00 00 00       cmp    eax,0x0
+15b:    0f 84 9f fe ff ff       je     0x0
+161:    e9 bf ff ff ff          jmp    0x125
+166:    e9 ba ff ff ff          jmp    0x125
+16b:    8b e5                   mov    esp,ebp
+16d:    5d                      pop    ebp
+16e:    c3                      ret

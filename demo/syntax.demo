@@ -1,7 +1,0 @@
-int fun() {
-	for (int i = 0; i < 100; i ++) {
-	    s = s + i;
-    }
-}
-
-int a = fun();

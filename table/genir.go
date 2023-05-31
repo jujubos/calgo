@@ -3,6 +3,7 @@ package table
 import (
 	"calgo/lexical"
 	"fmt"
+	"strconv"
 )
 
 var lbnum = 0
@@ -10,8 +11,9 @@ var lbnum = 0
 func GenLb() string {
 	lbnum++
 	lb := ".L"
-	return lb + string(lbnum)
+	return lb + strconv.Itoa(lbnum)
 }
+
 func GenFunHead(fun *Fun) {
 	fun.EnterScope()
 	Symtab.AddInst(NewEntryInst(fun))
@@ -74,12 +76,12 @@ func GenLea(v *Var) *Var {
 func GenAssign1(v *Var) *Var {
 	//为何要拷贝一个?
 	tmp := CopyVar(Symtab.ScopePath, v)
+	Symtab.AddVar(tmp) //声明符号要在使用符号之前，下面会生成使用这个符号的指令，所以这行代码必须在下面的前面
 	if !v.IsRef() {
 		Symtab.AddInst(NewInst(OP_AS, tmp, v, nil))
 	} else {
 		Symtab.AddInst(NewInst(OP_GET, tmp, v, nil))
 	}
-	Symtab.AddVar(tmp)
 	return tmp
 }
 
@@ -96,7 +98,7 @@ func GenAssign2(lval *Var, rval *Var) *Var {
 	if lval.IsRef() {
 		Symtab.AddInst(NewInst(OP_SET, rval, lval.Ptr, nil))
 	} else {
-		NewInst(OP_AS, lval, rval, nil)
+		Symtab.AddInst(NewInst(OP_AS, lval, rval, nil))
 	}
 	return lval
 }
@@ -128,7 +130,7 @@ func GenTwoOp(op lexical.TokenType, lvar, rvar *Var) *Var {
 	case lexical.SUB:
 		return GenSub(lvar, rvar)
 	}
-	if !lvar.IsBase() || rvar.IsBase() {
+	if !lvar.IsBase() || !rvar.IsBase() {
 		Error(fmt.Sprintf("该类型不支持这种运算:%d", op))
 	}
 	switch op {
@@ -410,7 +412,7 @@ func GenArray(arr *Var, idx *Var) *Var {
 		Error("GenArray: 不支持的变量类型")
 	}
 	return GenPtr(GenAdd(arr, idx))
-	/*TODO
+	/*TODO：思考
 	这里只产生了一条中间代码： t1 = arr + idx，
 	并产生了一个临时对象t2，t2是*t1的结果。后面该怎么使用呢？为什么这就是数组索引的翻译结果了？
 	*/
@@ -437,4 +439,136 @@ func GenCall(fun *Fun, args []*Var) *Var {
 		return tmp
 	}
 	return nil
+}
+
+func GenIfHead(cond *Var, _else *InterInst) {
+	if cond.IsRef() { //TODO:这里是为什么?
+		cond = GenAssign1(cond)
+	}
+	Symtab.AddInst(NewCondJmpInst(OP_JF, _else, cond))
+}
+
+// 即使没有else, 也需要_else标签，当cond为假时，跳到_else，即跳过此if语句
+func GenIfTail(_else *InterInst) {
+	Symtab.AddInst(_else)
+}
+
+func GenElseHead(_exit *InterInst, _else *InterInst) {
+	Symtab.AddInst(NewJmpInst(_exit)) //思考:和下条语句能否互换位置
+	Symtab.AddInst(_else)
+}
+
+func GenElseTail(_exit *InterInst) {
+	Symtab.AddInst(_exit)
+}
+
+// TODO
+func GenSwitchHead(_exit *InterInst) {
+	Push(nil, _exit)
+}
+
+func GenSwitchTail(_exit *InterInst) {
+	Symtab.AddInst(_exit)
+	Pop()
+}
+
+func GenCaseHead(_case_exit *InterInst, cond *Var, v *Var) {
+	Symtab.AddInst(NewJNEInst(_case_exit, cond, v))
+}
+
+func GenCaseTail(_case_exit *InterInst) {
+	Symtab.AddInst(_case_exit)
+}
+
+// TODO:思考：这里我简化了，是否会有问题
+func GenWhileCond(cond *Var, _exit *InterInst) {
+	Symtab.AddInst(NewCondJmpInst(OP_JF, _exit, cond))
+}
+
+func GenWhileHead(_while, _exit *InterInst) {
+	Symtab.AddInst(_while)
+	Push(_while, _exit)
+}
+
+func GenWhileTail(_while, _exit *InterInst) {
+	Symtab.AddInst(NewJmpInst(_while))
+	Symtab.AddInst(_exit) //TODO:思考，应该放在这里吗？
+	Pop()
+}
+
+func GenDoWhileHead(_do *InterInst) {
+	Symtab.AddInst(_do)
+}
+
+func GenDoWhileTail(_do, _exit *InterInst, cond *Var) {
+	Symtab.AddInst(NewCondJmpInst(OP_JT, _do, cond))
+	Symtab.AddInst(_exit)
+	Pop()
+}
+
+// after init
+func GenForHead(_for *InterInst) {
+	Symtab.AddInst(_for)
+}
+
+// cond_end
+func GenForCondBegin(_exit, _block, _step *InterInst, cond *Var) {
+	Symtab.AddInst(NewCondJmpInst(OP_JF, _exit, cond))
+	Symtab.AddInst(NewJmpInst(_block))
+	Symtab.AddInst(_step)
+}
+
+// step_end
+func GenForCondEnd(_for, _block *InterInst) {
+	Symtab.AddInst(NewJmpInst(_for))
+	Symtab.AddInst(_block)
+}
+
+// loop_end
+func GenForTail(_step, _exit *InterInst) {
+	Symtab.AddInst(NewJmpInst(_step))
+	Symtab.AddInst(_exit)
+}
+
+func GenBreak() {
+	if len(tails) == 0 {
+		Error("GenBreak:break语句不在循环或switch内")
+	}
+	lb := tails[len(tails)-1]
+	Symtab.AddInst(NewJmpInst(lb))
+}
+
+func GenContinue() {
+	if len(heads) == 0 {
+		Error("GenContinue:continue语句不在循环内")
+	}
+	lb := heads[len(heads)-1]
+	if lb == nil {
+		Error("GenContinue:switch语句内不允许出现continue")
+	}
+	Symtab.AddInst(NewJmpInst(lb))
+}
+
+var heads = []*InterInst{}
+var tails = []*InterInst{}
+
+func Push(h, t *InterInst) {
+	heads = append(heads, h)
+	tails = append(tails, t)
+}
+
+func GenVarInit(v *Var) bool {
+	if v.Name[0] == '<' {
+		return false
+	}
+	Symtab.AddInst(NewDecInst(v))
+	if v.SetInit() {
+		GenTwoOp(lexical.ASSIGN, v, v.initData)
+	}
+	return true
+}
+
+func Pop() {
+	heads = heads[:len(heads)-1]
+	tails = tails[:len(tails)-1]
 }
