@@ -18,12 +18,12 @@ type Var struct {
 	ArraySize int64
 	IsLeft    bool
 	initData  *Var
-	inited    bool
+	inited    bool /* 表示初始化表达式为常量。 */
 	IntVal    int64
 	CharVal   byte
 	StrVal    string //字符串常量值
 	PtrVal    string //字符指针值
-	Ptr       *Var   //?
+	Ptr       *Var   //Ptr是指针变量，指向当前变量
 	Size      int64
 	Offset    int64
 }
@@ -200,10 +200,11 @@ func (v *Var) IsRef() bool {
 	return v.Ptr != nil
 }
 
-// Finished
-// 变量声明初始化部分由setInit处理
-// 只有局部变量需要生成初始化指令：
+// 变量声明的初始化的语义分析由setInit处理
+// 只有局部变量需要生成初始化指令。全局变量的初始化表达式只能是常量
 // 如果显式初始化，则使用初始化表达式的值作为初始值；否则，使用默认值
+// 返回true表示是：局部变量使用非常量表达式初始化。
+// 返回false表示：初始化表达式为常量表达式。
 func (v *Var) SetInit() bool {
 	vinit := v.initData
 	if vinit == nil {
@@ -231,7 +232,7 @@ func (v *Var) SetInit() bool {
 				v.IntVal = s
 			}
 		}
-	} else { //非Literal，那就是变量
+	} else {                       //非Literal，那就是变量
 		if len(v.ScopePath) == 1 { //全局变量
 			jd, _ := json.Marshal(vinit)
 			Error(fmt.Sprintf("SetInit err:全局变量初始化必须是常量, %s, %v", v.Name, string(jd)))

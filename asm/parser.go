@@ -23,12 +23,13 @@ func (p *Parser) Error(info string) {
 }
 
 func (p *Parser) Parse() {
-	ScanNum++
 	p.program()
 	if !p.match(EOF) {
 		p.Error("Parse err: 最后不是文件结束符")
 	}
-	if ScanNum < 3 {
+	ScanNum++
+	if ScanNum <= 2 {
+		p.Reset()
 		p.Parse()
 	}
 }
@@ -480,4 +481,10 @@ func (p *Parser) match(typ TokenType) bool {
 
 func (p *Parser) move() {
 	p.tk = p.lexer.NextToken()
+}
+
+func (p *Parser) Reset() {
+	p.lexer.Reset()
+	p.tk = nil
+	p.move()
 }

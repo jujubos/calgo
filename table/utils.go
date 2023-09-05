@@ -16,7 +16,7 @@ func TypeCheck(p1, p2 *Var) bool {
 	if p1.IsBase() && p2.IsBase() {
 		return true
 	}
-	if p1.IsRef() && p2.IsRef() {
+	if !p1.IsBase() && !p2.IsBase() {
 		return p1.Typ == p2.Typ
 	}
 	return false

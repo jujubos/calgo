@@ -60,7 +60,7 @@ func NewDataLb(name string, t int, l int, v []int) *Lb_Record {
 func (l *Lb_Record) Write() {
 	for i := 0; i < l.Times; i++ {
 		for j := 0; j < len(l.Cont); j++ {
-			FWrite(unsafe.Pointer(&l.Cont[i]), uint32(l.Len), Elfout)
+			FWrite(unsafe.Pointer(&l.Cont[i]), uint32(l.Len), EXEFILE)
 			//WriteBytes(l.Cont[i], l.Len)
 		}
 	}

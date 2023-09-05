@@ -1,5 +1,16 @@
+int print(int t);
+extern int ex;
+
 int n, m, k = 3;
 char * p = "abc\n";
+
+
+int fun() {
+    ex = print(ex);
+    n --;
+    return ex;
+}
+
 int main() {
     int a, b, c;
     c = b --;
@@ -23,11 +34,5 @@ int main() {
            continue;
         }
     }
-}
-
-int print(int t) {}
-
-int fun() {
-    print(10);
-    return 10;
+    fun();
 }

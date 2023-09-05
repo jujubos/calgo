@@ -161,11 +161,14 @@ func Gen0Op(tktyp TokenType) {
 }
 
 func WriteBytes(v int, l int) {
+	CurAddr += l
+	if ScanNum == 2 {
+		return
+	}
 	p := (*[4]byte)(unsafe.Pointer(&v))
 	b := make([]byte, l)
 	copy(b[0:], (*p)[0:])
 	TmpCodeSeg.Write(b[:])
-	CurAddr += l
 }
 
 func WriteModRM() {
@@ -215,7 +218,7 @@ var TmpCodeSeg *os.File
 
 func init() {
 	var err error
-	TmpCodeSeg, err = os.OpenFile("tmp_code_seg.out", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+	TmpCodeSeg, err = os.OpenFile("./out/tmp_code_seg.out", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
 		log.Fatal(err)
 		panic("init err: open elf.out failed")

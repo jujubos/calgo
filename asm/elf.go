@@ -123,7 +123,10 @@ func (i *Inst) SetDisp(d, dl int) {
 var ELFOBJ = NewELF()
 
 func ProcessRel(typ int) bool {
-	if ScanNum == 1 || RelLb == nil {
+	if ScanNum == 1 {
+		return false
+	}
+	if RelLb == nil {
 		return false
 	}
 	flg := false
@@ -224,16 +227,39 @@ func (e *ELF) AssemObj() {
 		e.ShStrTab += n
 		e.ShStrTab += string(byte(0))
 	}
-	symidx := map[string]int{} //
-	stridx := map[string]int{} //所有的符号的串表索引
-	for i, n := range e.SymNames {
-		symidx[n] = i
+	symidx := map[string]int{}     //
+	stridx := map[string]int{}     //所有的符号的串表索引
+	allsymnames := []string{}      //除空符号外的所有符号名都在这了
+	for _, n := range e.SymNames { //先局部符号
+		if n == "" {
+			continue
+		}
+		sym := e.SymTab[n]
+		if (sym.ST_Info >> 4) == 0 {
+			allsymnames = append(allsymnames, n)
+			e.LocSym = append(e.LocSym, sym)
+		}
+	}
+	for _, n := range e.SymNames { //后全局符号
+		if n == "" {
+			continue
+		}
+		sym := e.SymTab[n]
+		if (sym.ST_Info >> 4) == 1 {
+			allsymnames = append(allsymnames, n)
+			e.GlbSym = append(e.GlbSym, sym)
+		}
+	}
+	//所有的符号都准备就绪，可以生成符号字符串表了
+	e.StrTab += string(0) //第一个永远是null
+	for i, n := range allsymnames {
+		symidx[n] = i + 1
 		stridx[n] = len(e.StrTab)
 		e.StrTab += n
 		e.StrTab += string(0)
 	}
 	//更新符号名索引
-	for _, n := range e.SymNames {
+	for _, n := range allsymnames {
 		e.SymTab[n].ST_Name = uint32(stridx[n])
 	}
 	//处理重定位表
@@ -280,14 +306,7 @@ func (e *ELF) AssemObj() {
 	curoff += int(e.Ehdr.E_Shnum * e.Ehdr.E_Shentsize)
 	//.symtab
 	//符号表的描述项中, info字段需要设置下。设置为第一个global符号的索引
-	for _, s := range e.SymTab {
-		if (s.ST_Info >> 4) == 1 { //global symbol
-			e.GlbSym = append(e.GlbSym, s)
-		} else {
-			e.LocSym = append(e.LocSym, s)
-		}
-	}
-	e.addShdr(".symtab", SHT_SYMTAB, 0, 0, curoff, int(len(e.SymNames))*int(unsafe.Sizeof(Elf32_Sym{})), shidx[".strtab"], len(e.LocSym), 1, int(unsafe.Sizeof(Elf32_Sym{})))
+	e.addShdr(".symtab", SHT_SYMTAB, 0, 0, curoff, int(len(e.SymNames))*int(unsafe.Sizeof(Elf32_Sym{})), shidx[".strtab"], len(e.LocSym)+1, 1, int(unsafe.Sizeof(Elf32_Sym{})))
 	curoff += len(e.SymNames) * int(unsafe.Sizeof(Elf32_Sym{})) // 已对齐
 	//.strtab
 	e.addShdr(".strtab", SHT_STRTAB, 0, 0, curoff, len(e.StrTab), SHN_UNDEF, 0, 1, 0)
@@ -310,14 +329,14 @@ func (e *ELF) WriteElf() {
 	padnum := uint32(0)
 	pad := byte(0)
 	//文件头
-	FWrite(unsafe.Pointer(&e.Ehdr), uint32(unsafe.Sizeof(e.Ehdr)), Elfout)
+	FWrite(unsafe.Pointer(&e.Ehdr), uint32(unsafe.Sizeof(e.Ehdr)), EXEFILE)
 	//数据段
 	Symtab.Write()
 	//padding
 	padnum = e.ShdrTab[".text"].sh_offset - e.ShdrTab[".data"].sh_offset - e.ShdrTab[".data"].sh_size
-	FWrite(unsafe.Pointer(&pad), padnum, Elfout)
+	FWrite(unsafe.Pointer(&pad), padnum, EXEFILE)
 	//代码段
-	codeseg, err := os.OpenFile("tmp_code_seg.out", os.O_RDONLY, 0666)
+	codeseg, err := os.OpenFile("./out/tmp_code_seg.out", os.O_RDONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
 		panic("WriteElf err, open tmp_code_seg.out failed!")
@@ -327,43 +346,45 @@ func (e *ELF) WriteElf() {
 		log.Fatal(err)
 		panic("WriteElf err, io.ReadAll failed!")
 	}
-	_, err = Elfout.Write(txt)
+	_, err = EXEFILE.Write(txt)
 	if err != nil {
 		log.Fatal(err)
-		panic("WriteElf err, Elfout.Write failed!")
+		panic("WriteElf err, EXEFILE.Write failed!")
 	}
 	//padding
 	padnum = e.ShdrTab[".shstrtab"].sh_offset - e.ShdrTab[".text"].sh_offset - e.ShdrTab[".text"].sh_size
-	FWrite(unsafe.Pointer(&pad), padnum, Elfout)
+	FWrite(unsafe.Pointer(&pad), padnum, EXEFILE)
 	//.shstrtab
-	Elfout.Write([]byte(e.ShStrTab))
+	EXEFILE.Write([]byte(e.ShStrTab))
 	//padding
 	padnum = e.Ehdr.E_Shoff - e.ShdrTab[".shstrtab"].sh_offset - e.ShdrTab[".shstrtab"].sh_size
-	FWrite(unsafe.Pointer(&pad), padnum, Elfout)
+	FWrite(unsafe.Pointer(&pad), padnum, EXEFILE)
 	//.shdrtab
 	for _, name := range e.ShdrNames {
 		sh := e.ShdrTab[name]
-		FWrite(unsafe.Pointer(sh), uint32(unsafe.Sizeof(Elf32_Shdr{})), Elfout)
+		FWrite(unsafe.Pointer(sh), uint32(unsafe.Sizeof(Elf32_Shdr{})), EXEFILE)
 	}
 	//.symtab
+	nullsym := e.SymTab[""]
+	FWrite(unsafe.Pointer(nullsym), uint32(unsafe.Sizeof(Elf32_Sym{})), EXEFILE)
 	for _, sym := range e.LocSym {
-		FWrite(unsafe.Pointer(sym), uint32(unsafe.Sizeof(Elf32_Sym{})), Elfout)
+		FWrite(unsafe.Pointer(sym), uint32(unsafe.Sizeof(Elf32_Sym{})), EXEFILE)
 	}
 	for _, sym := range e.GlbSym {
-		FWrite(unsafe.Pointer(sym), uint32(unsafe.Sizeof(Elf32_Sym{})), Elfout)
+		FWrite(unsafe.Pointer(sym), uint32(unsafe.Sizeof(Elf32_Sym{})), EXEFILE)
 	}
 	//.strtab
-	Elfout.Write([]byte(e.StrTab))
+	EXEFILE.Write([]byte(e.StrTab))
 	//padding
 	padnum = e.ShdrTab[".rel.text"].sh_offset - e.ShdrTab[".strtab"].sh_offset - e.ShdrTab[".strtab"].sh_size
-	FWrite(unsafe.Pointer(&pad), padnum, Elfout)
+	FWrite(unsafe.Pointer(&pad), padnum, EXEFILE)
 	//.rel.text
 	for _, r := range e.RelTextTab {
-		FWrite(unsafe.Pointer(r), uint32(unsafe.Sizeof(Elf32_Rel{})), Elfout)
+		FWrite(unsafe.Pointer(r), uint32(unsafe.Sizeof(Elf32_Rel{})), EXEFILE)
 	}
 	//.rel.data
 	for _, r := range e.RelDataTab {
-		FWrite(unsafe.Pointer(r), uint32(unsafe.Sizeof(Elf32_Rel{})), Elfout)
+		FWrite(unsafe.Pointer(r), uint32(unsafe.Sizeof(Elf32_Rel{})), EXEFILE)
 	}
 }
 
@@ -411,14 +432,16 @@ const (
 )
 
 const (
-	R_386_32   = 0
-	R_386_PC32 = 1
+	R_386_NONE = 0
+	R_386_32   = 1
+	R_386_PC32 = 2
 	SHN_UNDEF  = 0
 )
 
 const (
-	ET_NONE = 0
-	ET_REL  = 1
+	ET_NONE = 0 /* Unknown type. */
+	ET_REL  = 1 /* Relocatable. */
+	ET_EXEC = 2 /* Executable. */
 )
 
 const EM_386 = 3
@@ -433,13 +456,4 @@ func InstrInit() {
 	SIBP.Scale = -1
 }
 
-var Elfout *os.File
-
-func init() {
-	var err error
-	Elfout, err = os.OpenFile("./elf.out", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
-	if err != nil {
-		log.Fatal(err)
-		panic("open elf.out fail")
-	}
-}
+var EXEFILE *os.File

@@ -5,9 +5,9 @@ import (
 )
 
 type Fun struct {
+	Name        string
 	Externed    bool
 	Typ         lexical.TokenType
-	Name        string
 	ParaVar     []*Var
 	MaxDepth    int
 	CurEsp      int

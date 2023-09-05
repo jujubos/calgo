@@ -134,6 +134,10 @@ func (i *InterInst) SliceString() []string {
 	}
 }
 
+/*
+全局变量（全局符号）在汇编中的引用方式为符号名。 例如 'sum = 0;' 翻译为 'mov [sum], 0'
+局部变量（局部符号）在汇编中的引用方式为base+offset。例如 'mov [ebp+v.offset], 0'
+*/
 func (i *InterInst) ToX86Asm() {
 	if i.Label != "" {
 		Emit(fmt.Sprintf("%s:", i.Label))

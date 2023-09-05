@@ -59,6 +59,6 @@ func SwitchSeg(name string) {
 	CurAddr = 0
 }
 
-var ScanNum = 0
+var ScanNum = 1 //开始第ScanNum遍扫描
 var Symtab *SymTable = NewSymTable()
 var RelLb *Lb_Record

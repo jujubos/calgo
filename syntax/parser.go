@@ -80,7 +80,8 @@ func (p *Parser) def(ext bool, typ lexical.TokenType) {
 		if p.match(lexical.ID) {
 			varname := p.tk.(*lexical.TID).Name
 			p.move()
-			p.init(ext, typ, true, varname)
+			varr := p.init(ext, typ, true, varname)
+			table.Symtab.AddVar(varr)
 			p.deflist(ext, typ)
 		} else {
 			p.Error(fmt.Sprintf("def err: expected ID, but got %s", p.tk.String()))
@@ -97,15 +98,15 @@ func (p *Parser) def(ext bool, typ lexical.TokenType) {
 // <init> -> assign <expr> | ^
 // 如果某个变量的InitData为default，说明没有显示初始化
 func (p *Parser) init(ext bool, typ lexical.TokenType, isPtr bool, varname string) *table.Var {
-	v := &table.Var{
-		Name:    "default",
-		Literal: true,
+	initval := &table.Var{
+		Name:    "nil",
+		Literal: true, //常量
 	}
 	if p.match(lexical.ASSIGN) {
 		p.move()
-		v = p.expr()
+		initval = p.expr()
 	}
-	return table.NewVar(table.Symtab.ScopePath, ext, typ, isPtr, varname, v)
+	return table.NewVar(table.Symtab.ScopePath, ext, typ, isPtr, varname, initval)
 }
 
 // <deflist> -> comma <defdata> <deflist> | semicon
@@ -306,6 +307,7 @@ func (p *Parser) alotail(lval *table.Var) *table.Var {
 		result := table.GenTwoOp(op, lval, val)
 		return p.alotail(result)
 	}
+	/* choose production: <alotail> -> ^ */
 	return lval
 }
 
@@ -388,7 +390,6 @@ func (p *Parser) muls() lexical.TokenType {
 }
 
 // <elem> ->	id <idexpr> | lparen <expr> rparen | <literal>
-// 可以参与表达式运算的：变量、数组索引、函数调用、括号表达式、字面量
 func (p *Parser) elem() *table.Var {
 	var rs *table.Var
 	if p.match(lexical.ID) { //变量、数组索引、函数调用
@@ -617,6 +618,12 @@ func (p *Parser) statement() {
 		}
 		p.move()
 	default:
+		/* 对于标识符表达式statement，不产生任何指令。
+		   如果是基于虚拟的编译器，对于标识符表达式语句，如果要产生指令，会产生：
+				1.push identifier（将标识符表达式的值入栈）
+		        2.pop (弹出栈顶元素）
+		   等价于什么都不做。
+		*/
 		p.altexpr()
 		if !p.match(lexical.SEMICOLON) {
 			p.Error(fmt.Sprintf("statement err: expected ';', but got %s", p.tk.String()))
@@ -639,6 +646,11 @@ func (p *Parser) whilestat() {
 	p.move()
 	_while, _exit := table.NewLabelInst(), table.NewLabelInst()
 	table.GenWhileHead(_while, _exit)
+	/* 对于基于虚拟机的编译器，由于虚拟机基于一个栈计算表达式，表达式的值留在栈中，以便后续使用。
+	   对于c语言这种编译器，不是基于栈计算表达式的值，而是返回表达式值对应的符号索引。以便后续使用。
+	   altexpr会创建一个临时变量，将其添加到符号表。这个临时变量用于存储表达式的值。所以返回这个临时变量（临时符号）在符号表的索引，
+	   后续过程就可以使用到这个表达式的值了。
+	*/
 	cond := p.altexpr()
 	table.GenWhileCond(cond, _exit)
 	if !p.match(lexical.RPAREN) {

@@ -59,6 +59,7 @@ func LeaVar(reg32 string, v *Var) {
 	}
 }
 
+/* Store 'reg32' or 'reg8' based on type of 'v' into 'v'*/
 func StoreVar(reg32, reg8 string, v *Var) {
 	var reg string
 	if v.IsChar() {
@@ -74,6 +75,19 @@ func StoreVar(reg32, reg8 string, v *Var) {
 	}
 }
 
+/*
+int a;
+int *a;
+int a[3];
+char b;
+char *b;
+char b[3];
+void c; ❌
+数组不允许初始化。
+int类型初值为v.intval
+char类型初值为v.charval
+char*类型初值为v.Ptrval.
+*/
 func InitVar(v *Var) {
 	if v.inited {
 		var val int64

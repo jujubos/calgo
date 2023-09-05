@@ -7,7 +7,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"log"
 	"os"
-	"syscall"
 )
 
 type SymTable struct {
@@ -33,20 +32,29 @@ func (s *SymTable) Leave(info string) {
 	fmt.Printf("after leave, %s %v\n", info, s.ScopePath)
 }
 
+/* 变量声明、定义和初始化的语义分析 */
 func (s *SymTable) AddVar(varr *Var) {
 	if varr == nil {
 		return
 	}
+	/* 是否重复声明或定义 */
 	for _, v := range s.Vartab[varr.Name] {
 		if varr.Name[0] != '<' && v.ScopeID() == varr.ScopeID() {
 			Error(fmt.Sprintf("同一作用域下存在同名变量: %s", v.Name))
 		}
 	}
 	s.Vartab[varr.Name] = append(s.Vartab[varr.Name], varr)
-	//
-	flag := GenVarInit(varr)
-	if s.Curfun != nil && flag {
-		s.Curfun.Locate(varr)
+	//是否需要产生初始化指令
+	if !varr.Externed {
+		/* 如果不是常量，生成'OP_DEC varr' */
+		/* 如果是全局变量，在符号表中记录初值 */
+		/* 如果是局部变量，且初始化表达式为常量表达式，则在符号表中记录初值 */
+		/* 如果是局部变量，且初始化表达式不是常量表达式，则生成赋值指令：'varr = varr.initdata'(varr.initdata是varr的初始化表达式的值对应的符号) */
+		flag := GenVarInit(varr)
+		/* 如果是局部变量，记录局部变量相关信息（例如：偏移量），以及更新当前所处函数的栈桢的状态。 */
+		if s.Curfun != nil && flag {
+			s.Curfun.Locate(varr)
+		}
 	}
 }
 
@@ -136,6 +144,26 @@ func (s *SymTable) PrintInterCode() {
 	}
 }
 
+func (s *SymTable) PrintInterCodeOf(fun_name string) error {
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Op", "Result", "Arg1", "Arg2", "Label", "Target", "Fun"})
+	fun, ok := s.Funtab[fun_name]
+	if !ok {
+		return fmt.Errorf("function is not found:\"%s\"\n", fun_name)
+	}
+	table.ClearRows()
+	var data [][]string
+	for _, inst := range fun.Intercode {
+		data = append(data, inst.SliceString())
+	}
+	table.ClearFooter()
+	table.SetFooter([]string{fun.Name, "", "", "", "", "", ""})
+	table.AppendBulk(data)
+	table.Render()
+
+	return nil
+}
+
 func (s *SymTable) SaveObjCode() {
 	for _, f := range s.Funtab {
 		Emit(fmt.Sprintf("----------%s----------", f.Name))
@@ -162,7 +190,7 @@ func (s *SymTable) DefFun(fun *Fun) {
 	}
 	if f, ok := s.Funtab[fun.Name]; !ok {
 		s.Funtab[fun.Name] = fun
-		fun.Externed = true
+		fun.Externed = false
 		s.FunList = append(s.FunList, fun.Name)
 		s.Curfun = fun
 	} else {
@@ -230,20 +258,34 @@ func (s *SymTable) GetGlbVars() []*Var {
 	return res
 }
 
+/*
+生成数据段。【注意，数据段中只存放全局变量和静态变量（这个语言没有定义静态变量的语法），不需要考虑局部变量】
+遍历所有全局符号：
+ 1. global声明
+ 2. 如果是externed，只需global声明
+ 3. 输出符号名
+ 4. 如果是数组，输出times xxx
+ 5. 如果是char且不是指针，输出db，否则输出dd
+ 6. 如果有初始化：如果是基本类型，输出value；如果是指针类型，输出ptrval。
+ 7. 没有初始化，默认值为0
+*/
 func (s *SymTable) GenData() {
 	glbvars := s.GetGlbVars()
 	for _, v := range glbvars {
 		EmitAsm(fmt.Sprintf("global %s", v.Name))
+		if v.Externed { //extern声明的变量，只需要生成global声明
+			continue
+		}
 		s := ""
 		s += fmt.Sprintf("\t%s ", v.Name)
 		typsize := 4
-		if v.Typ == lexical.KW_CHAR {
+		if v.Typ == lexical.KW_CHAR && !v.IsPtr {
 			typsize = 1
 		}
 		if v.IsArray {
 			s += fmt.Sprintf("times %d ", v.Size/int64(typsize))
 		}
-		if v.Typ == lexical.KW_CHAR {
+		if typsize == 1 {
 			s += "db "
 		} else {
 			s += "dd "
@@ -260,7 +302,7 @@ func (s *SymTable) GenData() {
 		EmitAsm(s)
 	}
 	for _, strvar := range s.Strtab {
-		EmitAsm(fmt.Sprintf("\t%s db %s", strvar.Name, strvar.GenRawStr()))
+		EmitAsm(fmt.Sprintf("%s db %s", strvar.Name, strvar.GenRawStr()))
 	}
 }
 
@@ -270,6 +312,9 @@ func (s *SymTable) GenAsm() {
 	Emit("section .text")
 	for _, f := range s.Funtab {
 		EmitAsm(fmt.Sprintf("global %s", f.Name))
+		if f.Externed { //没有函数定义，只需要生成global声明
+			continue
+		}
 		EmitAsm(fmt.Sprintf("%s:", f.Name))
 		for _, inst := range f.Intercode {
 			inst.ToX86Asm()
@@ -295,10 +340,5 @@ var Symtab = &SymTable{
 var AsmFile *os.File
 
 func init() {
-	var err error
-	AsmFile, err = os.OpenFile("./code.asm", os.O_CREATE|syscall.O_RDWR|os.O_TRUNC, 0666)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(0)
-	}
+
 }

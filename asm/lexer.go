@@ -68,6 +68,7 @@ var lexErrorTable = map[string]string{
 type Lexer struct {
 	ch       byte
 	scanner  *bufio.Reader
+	f        *os.File
 	lineNum  int
 	colNum   int
 	filename string
@@ -89,6 +90,7 @@ func NewLexer(filename string) *Lexer {
 		lineNum:  0,
 		colNum:   0,
 		newline:  true,
+		f:        file,
 	}
 	lexer.NextChar()
 	return lexer
@@ -198,4 +200,12 @@ func (l *Lexer) NextChar() {
 		l.newline = false
 	}
 	l.ch = c
+}
+
+func (l *Lexer) Reset() {
+	l.f.Seek(0, 0)
+	l.lineNum = 0
+	l.colNum = 0
+	l.newline = true
+	l.NextChar()
 }
