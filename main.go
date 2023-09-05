@@ -5,8 +5,10 @@ import (
 	"calgo/syntax"
 	"calgo/table"
 	"flag"
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
@@ -27,6 +29,23 @@ func (i *InterCodeSpec) String() string {
 	return res + ">"
 }
 
+func create_file(fpath string) {
+	dirPath := filepath.Dir(fpath)
+
+	err := os.MkdirAll(dirPath, 0755)
+	if err != nil {
+		fmt.Println("无法创建目录:", err)
+		return
+	}
+
+	file, err := os.Create(fpath)
+	if err != nil {
+		fmt.Println("无法创建文件:", err)
+		return
+	}
+	defer file.Close()
+}
+
 func main() {
 	var err error
 	var intercode_spec InterCodeSpec
@@ -35,9 +54,10 @@ func main() {
 	exefile := flag.String("exefile", "./out/elf_reloc.o", "relocatable object file")
 	flag.Var(&intercode_spec, "print_intercode", "print intercode")
 	flag.Parse()
-
+	/* make sure the output files exists(sourcefile is user's duty)  */
+	create_file(*asmfile)
+	create_file(*exefile)
 	/* 编译阶段（已完成） */
-	//filename := "./demo/intercode.demo"
 	parser := syntax.NewParser(*sourcefile)
 	parser.Parse()
 	table.AsmFile, err = os.OpenFile(*asmfile, os.O_CREATE|syscall.O_RDWR|os.O_TRUNC, 0666)
