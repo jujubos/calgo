@@ -13,6 +13,7 @@ int fun() {
 
 int main() {
     int a, b, c;
+    n * m;
     c = b --;
     while (a < 0) {
 

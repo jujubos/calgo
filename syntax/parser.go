@@ -28,7 +28,7 @@ func (p *Parser) Parse() {
 	p.move()
 	p.program()
 	if !p.match(lexical.EOF) {
-		p.Error(fmt.Sprintf("Parse err: expected EOF, but got %s", p.tk.String()))
+		p.Error(fmt.Sprintf("Parse err: EOF expected, but got %s", p.tk.String()))
 	} else {
 		fmt.Println("语法分析通过!")
 	}
@@ -335,13 +335,11 @@ func (p *Parser) factor() *table.Var {
 }
 
 // <itemtail> -> <muls> <factor> <itemtail> | ^
-// MUL | DIV | MOD
 func (p *Parser) itemtail(lval *table.Var) *table.Var {
 	if p.match(lexical.MUL) || p.match(lexical.DIV) || p.match(lexical.MOD) {
 		op := p.muls()
 		val := p.factor()
 		result := table.GenTwoOp(op, lval, val)
-		table.Symtab.AddVar(result)
 		return p.itemtail(result)
 	}
 	return lval
